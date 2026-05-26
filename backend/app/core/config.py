@@ -4,6 +4,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://user:pass@localhost/digitalpmo"
+
+    def get_database_url(self) -> str:
+        return self.DATABASE_URL.replace("postgres://", "postgresql://", 1)
     REDIS_URL: str = "redis://localhost:6379"
     SECRET_KEY: str = "your-secret-key-min-32-chars-change-in-production"
     ALGORITHM: str = "HS256"
