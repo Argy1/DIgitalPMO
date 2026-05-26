@@ -17,11 +17,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 # ---------------------------------------------------------------------------
-# Helpers — reuse Enum type objects with create_type=False after first use
+# Use postgresql.ENUM with create_type=False — reliably prevents SQLAlchemy
+# from emitting CREATE TYPE during op.create_table (sa.Enum is not reliable
+# in SQLAlchemy 2.x when enum types already exist in the database).
 # ---------------------------------------------------------------------------
 
-def _enum(*values, name: str) -> sa.Enum:
-    return sa.Enum(*values, name=name, create_type=False)
+def _enum(*values, name: str) -> postgresql.ENUM:
+    return postgresql.ENUM(*values, name=name, create_type=False)
 
 
 def upgrade() -> None:
