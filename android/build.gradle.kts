@@ -16,13 +16,13 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
-    project.evaluationDependsOn(":app")
+    afterEvaluate {
+        extensions.findByType(com.android.build.gradle.LibraryExtension::class.java)?.compileSdk = 36
+    }
 }
 
 subprojects {
-    plugins.withId("com.android.library") {
-        (extensions.getByName("android") as com.android.build.gradle.LibraryExtension).compileSdk = 36
-    }
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register<Delete>("clean") {
