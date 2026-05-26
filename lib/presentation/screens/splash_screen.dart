@@ -41,7 +41,14 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkAuthState() async {
-    final hasToken = await ApiService.instance.hasValidToken();
+    bool hasToken = false;
+    try {
+      hasToken = await ApiService.instance
+          .hasValidToken()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // timeout or network error — treat as unauthenticated and continue
+    }
     if (!mounted) return;
 
     if (hasToken) {
