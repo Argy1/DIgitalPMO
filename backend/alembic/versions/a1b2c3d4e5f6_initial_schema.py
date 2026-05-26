@@ -27,35 +27,20 @@ def _enum(*values, name: str) -> sa.Enum:
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # ── 1. Create PostgreSQL ENUM types ─────────────────────────────────────
-    conn.execute(sa.text(
-        "CREATE TYPE user_role AS ENUM ('patient', 'pmo', 'doctor', 'admin')"
-    ))
-    conn.execute(sa.text(
-        "CREATE TYPE gender_type AS ENUM ('laki-laki', 'perempuan')"
-    ))
-    conn.execute(sa.text(
-        "CREATE TYPE tb_type AS ENUM ('TB Paru', 'TB Ekstra Paru', 'TB RO')"
-    ))
-    conn.execute(sa.text(
-        "CREATE TYPE treatment_phase AS ENUM ('intensive', 'continuation')"
-    ))
-    conn.execute(sa.text(
-        "CREATE TYPE medication_status AS ENUM ('confirmed', 'skipped', 'late', 'pending')"
-    ))
-    conn.execute(sa.text(
-        "CREATE TYPE side_effect_severity AS ENUM ('ringan', 'sedang', 'berat')"
-    ))
-    conn.execute(sa.text(
-        "CREATE TYPE control_type AS ENUM ('kontrol_1', 'kontrol_2', 'kontrol_3')"
-    ))
-    conn.execute(sa.text(
-        "CREATE TYPE risk_level AS ENUM ('low', 'medium', 'high', 'critical')"
-    ))
-    conn.execute(sa.text(
-        "CREATE TYPE notification_type AS ENUM "
-        "('medication', 'control', 'education', 'ai', 'system', 'risk_alert')"
-    ))
+    # ── 1. Create PostgreSQL ENUM types (idempotent — safe to re-run) ────────
+    enum_statements = [
+        "DO $$ BEGIN CREATE TYPE user_role AS ENUM ('patient', 'pmo', 'doctor', 'admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "DO $$ BEGIN CREATE TYPE gender_type AS ENUM ('laki-laki', 'perempuan'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "DO $$ BEGIN CREATE TYPE tb_type AS ENUM ('TB Paru', 'TB Ekstra Paru', 'TB RO'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "DO $$ BEGIN CREATE TYPE treatment_phase AS ENUM ('intensive', 'continuation'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "DO $$ BEGIN CREATE TYPE medication_status AS ENUM ('confirmed', 'skipped', 'late', 'pending'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "DO $$ BEGIN CREATE TYPE side_effect_severity AS ENUM ('ringan', 'sedang', 'berat'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "DO $$ BEGIN CREATE TYPE control_type AS ENUM ('kontrol_1', 'kontrol_2', 'kontrol_3'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "DO $$ BEGIN CREATE TYPE risk_level AS ENUM ('low', 'medium', 'high', 'critical'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+        "DO $$ BEGIN CREATE TYPE notification_type AS ENUM ('medication', 'control', 'education', 'ai', 'system', 'risk_alert'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    ]
+    for stmt in enum_statements:
+        conn.execute(sa.text(stmt))
 
     # ── 2. users ─────────────────────────────────────────────────────────────
     op.create_table(
