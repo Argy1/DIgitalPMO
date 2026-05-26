@@ -52,7 +52,10 @@ backend/.env
 backend/firebase.json
 backend/*.log
 
-# Debug screenshots and XML window dumps
-*.png
-*.xml
+# Debug screenshots and XML window dumps (root-level only)
+/*.png
+/*.xml
 *.iml
+
+# Allow app assets
+!assets/
