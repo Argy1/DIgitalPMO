@@ -30,7 +30,7 @@ class UnauthorizedException implements Exception {
 
 const _baseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://192.168.1.14:8000',
+  defaultValue: 'https://digitalpmo-production.up.railway.app',
 );
 const _tokenKey = 'access_token';
 const _maxRetries = 3;
