@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<title>DigitalPMO — All Chat Screens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #E8EFEC; min-height: 100vh; }
+  body {
+    font-family: 'Inter', sans-serif; color: #1A2E2A;
+    padding: 48px 32px 80px;
+    background:
+      radial-gradient(1200px 600px at 20% 0%, #DCEAE5 0%, transparent 60%),
+      radial-gradient(1000px 500px at 80% 100%, #E6F0EC 0%, transparent 60%),
+      #E8EFEC;
+    min-height: 100vh; box-sizing: border-box;
+  }
+  .head { max-width: 2200px; margin: 0 auto 32px; }
+  .head .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #1A6B5A; text-transform: uppercase; }
+  .head h1 { font-family: 'Poppins', sans-serif; font-size: 36px; font-weight: 800; margin: 8px 0 6px; letter-spacing: -1px; }
+  .head p { margin: 0; color: #6B8080; font-size: 15px; max-width: 700px; }
+  .row { display: flex; gap: 28px; justify-content: center; flex-wrap: wrap; max-width: 2200px; margin: 0 auto; }
+  .slot { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .slot .tag { font-size: 11px; font-weight: 700; letter-spacing: 1.4px; color: #6B8080; text-transform: uppercase; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="head">
+  <div class="eyebrow">DigitalPMO · PMO AI Chat</div>
+  <h1>All 5 Chat Screens (refined)</h1>
+  <p>Welcome empty-state + active conversation + 3 specialized response types (emergency, education, motivation), all sharing the refined <code>chat-shell.jsx</code>.</p>
+</div>
+<div class="row">
+  <div class="slot"><div class="tag">01 · Welcome</div><div id="root1"></div></div>
+  <div class="slot"><div class="tag">02 · Active</div><div id="root2"></div></div>
+  <div class="slot"><div class="tag">03 · Emergency</div><div id="root3"></div></div>
+  <div class="slot"><div class="tag">04 · Education</div><div id="root4"></div></div>
+  <div class="slot"><div class="tag">05 · Motivation</div><div id="root5"></div></div>
+</div>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="pmo-theme.jsx"></script>
+<script type="text/babel" src="auth-shell.jsx"></script>
+<script type="text/babel" src="chat-shell.jsx"></script>
+<script type="text/babel" src="chat-welcome.jsx"></script>
+<script type="text/babel" src="chat-active.jsx"></script>
+<script type="text/babel" src="chat-responses.jsx"></script>
+<script type="text/babel">
+  ReactDOM.createRoot(document.getElementById('root1')).render(
+    <IOSDevice width={390} height={844}><ChatWelcome /></IOSDevice>);
+  ReactDOM.createRoot(document.getElementById('root2')).render(
+    <IOSDevice width={390} height={844}><ChatActive /></IOSDevice>);
+  ReactDOM.createRoot(document.getElementById('root3')).render(
+    <IOSDevice width={390} height={844}><ChatEmergency /></IOSDevice>);
+  ReactDOM.createRoot(document.getElementById('root4')).render(
+    <IOSDevice width={390} height={844}><ChatEducation /></IOSDevice>);
+  ReactDOM.createRoot(document.getElementById('root5')).render(
+    <IOSDevice width={390} height={844}><ChatMotivation /></IOSDevice>);
+</script>
+</body>
+</html>
