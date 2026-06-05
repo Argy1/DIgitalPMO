@@ -37,6 +37,7 @@ class RegisterResponse(BaseModel):
     message: str
     phone_masked: str
     dev_otp: Optional[str] = None
+    skip_otp: bool = False
 
 
 class LoginRequest(BaseModel):

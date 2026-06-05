@@ -85,21 +85,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text,
       );
       if (mounted) {
-        final devOtp = result['dev_otp'] as String?;
-        if (devOtp != null && devOtp.isNotEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('OTP local: $devOtp'),
-              duration: const Duration(seconds: 6),
-            ),
-          );
-        }
+        final skipOtp = result['skip_otp'] as bool? ?? false;
         final phone = Uri.encodeComponent(
           normalizePhoneNumber(_phoneController.text),
         );
         final name = Uri.encodeComponent(_nameController.text.trim());
-        final query = devOtp == null || devOtp.isEmpty ? '' : '?devOtp=$devOtp';
-        context.go('/otp/$phone/$name$query');
+        if (skipOtp) {
+          context.go('/setup-profile/$phone/$name');
+        } else {
+          final devOtp = result['dev_otp'] as String?;
+          if (devOtp != null && devOtp.isNotEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('OTP local: $devOtp'),
+                duration: const Duration(seconds: 6),
+              ),
+            );
+          }
+          final query = devOtp == null || devOtp.isEmpty ? '' : '?devOtp=$devOtp';
+          context.go('/otp/$phone/$name$query');
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -225,15 +230,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           keyboardType: TextInputType.phone,
                           prefixIcon: Icons.phone,
                           error: _phoneError,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'OTP dikirim ke sini',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textMute,
-                          ),
                         ),
                       ],
                     ),

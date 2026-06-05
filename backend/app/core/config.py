@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     # Fernet key for field-level encryption. Generate with:
     #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     ENCRYPTION_KEY: str = ""
+    SKIP_OTP: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 

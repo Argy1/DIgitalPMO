@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, get_db, limiter
+from app.core.config import get_settings
 from app.core.security import decode_token
 from app.models.audit_log import AuditLog
 from app.models.user import User
@@ -73,14 +74,14 @@ def register(
 ):
     """Register new user account and send OTP for verification."""
     user, _otp = auth_service.register(db, body.name, body.phone, body.password)
-    # _otp is logged at INFO level by auth_service (dev mode).
-    # In production: send via SMS/WhatsApp gateway here.
     _audit(db, "auth.register", user_id=user.id, entity_id=user.id, ip=_client_ip(request))
     db.commit()
+    skip = get_settings().SKIP_OTP
     return RegisterResponse(
-        message="Registrasi berhasil. Kode OTP telah dikirim ke nomor Anda.",
+        message="Registrasi berhasil." if skip else "Registrasi berhasil. Kode OTP telah dikirim ke nomor Anda.",
         phone_masked=_mask_phone(body.phone),
         dev_otp=_otp,
+        skip_otp=skip,
     )
 
 
