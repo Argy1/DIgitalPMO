@@ -120,10 +120,13 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     if not user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Akun belum diverifikasi. Silakan verifikasi OTP terlebih dahulu.",
-        )
+        if not get_settings().SKIP_OTP:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Akun belum diverifikasi. Silakan verifikasi OTP terlebih dahulu.",
+            )
+        user.is_verified = True
+        db.commit()
     tokens = auth_service.create_tokens(user)
     _audit(db, "auth.login", user_id=user.id, entity_id=user.id, ip=_client_ip(request))
     db.commit()
