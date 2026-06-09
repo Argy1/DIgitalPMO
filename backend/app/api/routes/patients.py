@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 # TB treatment durations in days
 _PHASE_INTENSIVE_DAYS = 56   # first 8 weeks
-_TREATMENT_TOTAL_DAYS = 180  # standard TB Paru/Ekstra Paru
-_TREATMENT_TOTAL_DAYS_RO = 730  # TB RO (~24 months)
+_TREATMENT_TOTAL_DAYS = 180  # default fallback bila durasi tidak diisi dokter
+_TREATMENT_TOTAL_DAYS_RO = 730  # default fallback TB RO (~24 bulan)
 
 # Control schedule offsets (days from treatment_start_date)
 _CONTROL_DAYS = [
@@ -61,9 +61,15 @@ def _calculate_phase(treatment_start_date: date) -> str:
     return "intensive" if days_elapsed < _PHASE_INTENSIVE_DAYS else "continuation"
 
 
-def _treatment_end_date(treatment_start_date: date, tb_type: str) -> date:
-    total = _TREATMENT_TOTAL_DAYS_RO if tb_type == "TB RO" else _TREATMENT_TOTAL_DAYS
-    return treatment_start_date + timedelta(days=total)
+def _treatment_total_days(tb_category: str, duration_days: int | None) -> int:
+    """Durasi diisi manual oleh dokter; fallback ke default per kategori."""
+    if duration_days and duration_days > 0:
+        return duration_days
+    return _TREATMENT_TOTAL_DAYS_RO if tb_category == "RO" else _TREATMENT_TOTAL_DAYS
+
+
+def _treatment_end_date(treatment_start_date: date, total_days: int) -> date:
+    return treatment_start_date + timedelta(days=total_days)
 
 
 # ── GET /me ───────────────────────────────────────────────────────────────────
@@ -113,7 +119,8 @@ def setup_profile(
         )
 
     current_phase = _calculate_phase(body.treatment_start_date)
-    end_date = _treatment_end_date(body.treatment_start_date, body.tb_type)
+    total_days = _treatment_total_days(body.tb_category, body.treatment_duration_days)
+    end_date = _treatment_end_date(body.treatment_start_date, total_days)
 
     profile = PatientProfile(
         user_id=current_user.id,
@@ -121,10 +128,16 @@ def setup_profile(
         gender=body.gender,
         faskes_name=body.faskes_name,
         doctor_name=body.doctor_name,
-        tb_type=body.tb_type,
+        tb_category=body.tb_category,
+        tb_so_type=body.tb_so_type if body.tb_category == "SO" else None,
+        tb_ro_type=body.tb_ro_type if body.tb_category == "RO" else None,
         treatment_start_date=body.treatment_start_date,
         current_phase=current_phase,
+        treatment_duration_days=total_days,
         treatment_end_date=end_date,
+        medication_type=body.medication_type,
+        fdc_type=body.fdc_type,
+        custom_medications=body.custom_medications,
         weight_kg=body.weight_kg,
         address=body.address,
         is_pregnant=body.is_pregnant or False,
@@ -235,10 +248,8 @@ def get_dashboard(
     """Return patient dashboard summary."""
     today = date.today()
     days_in_treatment = (today - current_patient.treatment_start_date).days
-    total_days = (
-        _TREATMENT_TOTAL_DAYS_RO
-        if current_patient.tb_type == "TB RO"
-        else _TREATMENT_TOTAL_DAYS
+    total_days = _treatment_total_days(
+        current_patient.tb_category, current_patient.treatment_duration_days
     )
     completion_pct = min((days_in_treatment / total_days) * 100, 100.0)
 
@@ -257,7 +268,9 @@ def get_dashboard(
             "full_name": current_patient.user.full_name,
             "faskes_name": current_patient.faskes_name,
             "doctor_name": current_patient.doctor_name,
-            "tb_type": current_patient.tb_type,
+            "tb_category": current_patient.tb_category,
+            "tb_so_type": current_patient.tb_so_type,
+            "tb_ro_type": current_patient.tb_ro_type,
             "current_phase": current_patient.current_phase,
             "treatment_start_date": current_patient.treatment_start_date.isoformat(),
             "treatment_end_date": (

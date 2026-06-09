@@ -3,6 +3,7 @@
 
 from app.models.user import User  # noqa: F401
 from app.models.patient import PatientProfile  # noqa: F401
+from app.models.pmo_patient import PMOPatient  # noqa: F401
 from app.models.ai_photo_verification import AIPhotoVerification  # noqa: F401
 from app.models.medication import MedicationSchedule, MedicationLog  # noqa: F401
 from app.models.symptom import SymptomLog  # noqa: F401
@@ -17,6 +18,7 @@ from app.models.audit_log import AuditLog  # noqa: F401
 __all__ = [
     "User",
     "PatientProfile",
+    "PMOPatient",
     "AIPhotoVerification",
     "MedicationSchedule",
     "MedicationLog",

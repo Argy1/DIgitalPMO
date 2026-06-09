@@ -6,7 +6,12 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
-from app.models.enums import medication_status_enum, treatment_phase_enum
+from app.models.enums import (
+    fdc_type_enum,
+    medication_status_enum,
+    medication_type_enum,
+    treatment_phase_enum,
+)
 
 
 class MedicationSchedule(Base):
@@ -20,6 +25,16 @@ class MedicationSchedule(Base):
         index=True,
     )
     phase = Column(treatment_phase_enum, nullable=False)
+    medication_type = Column(medication_type_enum, nullable=True)
+    fdc_type = Column(fdc_type_enum, nullable=True)
+    # Jumlah tablet per dosis (berdasarkan berat badan pasien)
+    # 30-37kg=2, 38-54kg=3, 55-70kg=4, >70kg=5
+    tablet_count = Column(Integer, nullable=True)
+    # Frekuensi per minggu: 7=setiap hari (fase intensif), 3=3x seminggu (fase lanjutan FDC)
+    frequency_per_week = Column(Integer, nullable=False, default=7)
+    # Hari-hari dalam seminggu untuk jadwal (1=Senin ... 7=Minggu)
+    # Contoh fase lanjutan FDC: [1, 3, 5] = Senin, Rabu, Jumat
+    schedule_days = Column(JSONB, nullable=True)
     # e.g. ["R", "H", "Z", "E"]
     medications = Column(JSONB, nullable=False, default=list)
     # e.g. ["07:00", "19:00"]
