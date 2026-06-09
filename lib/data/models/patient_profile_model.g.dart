@@ -20,23 +20,29 @@ class PatientProfileModelAdapter extends TypeAdapter<PatientProfileModel> {
       userId: fields[0] as String,
       dateOfBirth: fields[1] as DateTime,
       gender: fields[2] as String,
-      address: fields[3] as String,
+      address: fields[3] as String?,
       faskesName: fields[4] as String,
       doctorName: fields[5] as String,
-      tbType: fields[6] as String,
       treatmentStartDate: fields[7] as DateTime,
       currentPhase: fields[8] as String,
       weightKg: fields[9] as double,
       isTreatmentComplete: fields[10] as bool,
       isHospitalized: fields[11] as bool,
       isPregnant: fields[12] as bool,
+      tbCategory: fields[13] as String,
+      tbSoType: fields[14] as String?,
+      tbRoType: fields[15] as String?,
+      treatmentDurationDays: fields[16] as int?,
+      medicationType: fields[17] as String?,
+      fdcType: fields[18] as String?,
+      customMedications: (fields[19] as List?)?.cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, PatientProfileModel obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.userId)
       ..writeByte(1)
@@ -49,8 +55,6 @@ class PatientProfileModelAdapter extends TypeAdapter<PatientProfileModel> {
       ..write(obj.faskesName)
       ..writeByte(5)
       ..write(obj.doctorName)
-      ..writeByte(6)
-      ..write(obj.tbType)
       ..writeByte(7)
       ..write(obj.treatmentStartDate)
       ..writeByte(8)
@@ -62,7 +66,21 @@ class PatientProfileModelAdapter extends TypeAdapter<PatientProfileModel> {
       ..writeByte(11)
       ..write(obj.isHospitalized)
       ..writeByte(12)
-      ..write(obj.isPregnant);
+      ..write(obj.isPregnant)
+      ..writeByte(13)
+      ..write(obj.tbCategory)
+      ..writeByte(14)
+      ..write(obj.tbSoType)
+      ..writeByte(15)
+      ..write(obj.tbRoType)
+      ..writeByte(16)
+      ..write(obj.treatmentDurationDays)
+      ..writeByte(17)
+      ..write(obj.medicationType)
+      ..writeByte(18)
+      ..write(obj.fdcType)
+      ..writeByte(19)
+      ..write(obj.customMedications);
   }
 
   @override

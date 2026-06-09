@@ -22,6 +22,21 @@ class MedicationScheduleModel {
   @HiveField(5)
   final int reminderBefore;
 
+  @HiveField(6)
+  final String? medicationType; // "FDC" atau "Kombinasi"
+
+  @HiveField(7)
+  final String? fdcType; // "FDC" atau "Kombipak"
+
+  @HiveField(8)
+  final int? tabletCount; // jumlah tablet per dosis (berbasis berat badan)
+
+  @HiveField(9)
+  final int frequencyPerWeek; // 7=setiap hari, 3=3x seminggu
+
+  @HiveField(10)
+  final List<int>? scheduleDays; // [1,2,3,4,5,6,7] atau [1,3,5]
+
   MedicationScheduleModel({
     required this.id,
     required this.patientId,
@@ -29,16 +44,54 @@ class MedicationScheduleModel {
     required this.medications,
     required this.scheduleTimes,
     this.reminderBefore = 15,
+    this.medicationType,
+    this.fdcType,
+    this.tabletCount,
+    this.frequencyPerWeek = 7,
+    this.scheduleDays,
   });
 
   factory MedicationScheduleModel.fromJson(Map<String, dynamic> json) {
+    // medications can be List<String> or List<Map> from backend
+    List<String> parseMedications(dynamic raw) {
+      if (raw == null) return [];
+      final list = raw as List;
+      if (list.isEmpty) return [];
+      if (list.first is String) return List<String>.from(list);
+      // Backend sends [{"code": "R", "name": "Rifampicin"}, ...]
+      return list
+          .map((e) => (e as Map<String, dynamic>)['code'] as String? ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+
     return MedicationScheduleModel(
       id: json['id'] as String,
-      patientId: json['patientId'] as String,
-      phase: json['phase'] as String,
-      medications: List<String>.from(json['medications'] as List),
-      scheduleTimes: List<String>.from(json['scheduleTimes'] as List),
-      reminderBefore: json['reminderBefore'] as int? ?? 15,
+      patientId: json['patientId'] as String? ??
+          json['patient_id'] as String? ??
+          '',
+      phase: json['phase'] as String? ?? 'intensive',
+      medications: parseMedications(json['medications']),
+      scheduleTimes: json['scheduleTimes'] != null
+          ? List<String>.from(json['scheduleTimes'] as List)
+          : (json['schedule_times'] != null
+              ? List<String>.from(json['schedule_times'] as List)
+              : []),
+      reminderBefore: json['reminderBefore'] as int? ??
+          json['reminder_before'] as int? ??
+          15,
+      medicationType: json['medicationType'] as String? ??
+          json['medication_type'] as String?,
+      fdcType: json['fdcType'] as String? ?? json['fdc_type'] as String?,
+      tabletCount: json['tabletCount'] as int? ?? json['tablet_count'] as int?,
+      frequencyPerWeek: json['frequencyPerWeek'] as int? ??
+          json['frequency_per_week'] as int? ??
+          7,
+      scheduleDays: json['scheduleDays'] != null
+          ? List<int>.from(json['scheduleDays'] as List)
+          : (json['schedule_days'] != null
+              ? List<int>.from(json['schedule_days'] as List)
+              : null),
     );
   }
 
@@ -50,6 +103,11 @@ class MedicationScheduleModel {
       'medications': medications,
       'scheduleTimes': scheduleTimes,
       'reminderBefore': reminderBefore,
+      'medicationType': medicationType,
+      'fdcType': fdcType,
+      'tabletCount': tabletCount,
+      'frequencyPerWeek': frequencyPerWeek,
+      'scheduleDays': scheduleDays,
     };
   }
 
@@ -60,6 +118,11 @@ class MedicationScheduleModel {
     List<String>? medications,
     List<String>? scheduleTimes,
     int? reminderBefore,
+    String? medicationType,
+    String? fdcType,
+    int? tabletCount,
+    int? frequencyPerWeek,
+    List<int>? scheduleDays,
   }) {
     return MedicationScheduleModel(
       id: id ?? this.id,
@@ -68,9 +131,35 @@ class MedicationScheduleModel {
       medications: medications ?? this.medications,
       scheduleTimes: scheduleTimes ?? this.scheduleTimes,
       reminderBefore: reminderBefore ?? this.reminderBefore,
+      medicationType: medicationType ?? this.medicationType,
+      fdcType: fdcType ?? this.fdcType,
+      tabletCount: tabletCount ?? this.tabletCount,
+      frequencyPerWeek: frequencyPerWeek ?? this.frequencyPerWeek,
+      scheduleDays: scheduleDays ?? this.scheduleDays,
     );
   }
 
+  // ── Helper getters ────────────────────────────────────────────────────────
+
+  /// Apakah jadwal ini 3x seminggu? (fase lanjutan FDC)
+  bool get isThreeTimesWeekly => frequencyPerWeek == 3;
+
+  /// Display label untuk frekuensi minum obat
+  String get frequencyDisplay {
+    if (frequencyPerWeek == 7) return 'Setiap hari';
+    if (frequencyPerWeek == 3) return '3x seminggu';
+    return '$frequencyPerWeek x seminggu';
+  }
+
+  /// Display label untuk jenis/jumlah obat
+  String get medicationDisplay {
+    if (medicationType == 'FDC') {
+      return '${tabletCount ?? "?"} tablet ${fdcType ?? "FDC"}';
+    }
+    return medications.join(' + ');
+  }
+
   @override
-  String toString() => 'MedicationScheduleModel(id: $id, patientId: $patientId)';
+  String toString() =>
+      'MedicationScheduleModel(id: $id, patientId: $patientId, phase: $phase)';
 }

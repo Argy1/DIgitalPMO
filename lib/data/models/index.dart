@@ -10,3 +10,4 @@ export 'monthly_report_model.dart';
 export 'app_state_model.dart';
 export 'chat_message_model.dart';
 export 'sync_queue_item.dart';
+export 'pmo_patient_model.dart';

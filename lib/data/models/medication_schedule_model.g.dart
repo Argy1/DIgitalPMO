@@ -24,13 +24,18 @@ class MedicationScheduleModelAdapter
       medications: (fields[3] as List).cast<String>(),
       scheduleTimes: (fields[4] as List).cast<String>(),
       reminderBefore: fields[5] as int,
+      medicationType: fields[6] as String?,
+      fdcType: fields[7] as String?,
+      tabletCount: fields[8] as int?,
+      frequencyPerWeek: fields[9] as int,
+      scheduleDays: (fields[10] as List?)?.cast<int>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, MedicationScheduleModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -42,7 +47,17 @@ class MedicationScheduleModelAdapter
       ..writeByte(4)
       ..write(obj.scheduleTimes)
       ..writeByte(5)
-      ..write(obj.reminderBefore);
+      ..write(obj.reminderBefore)
+      ..writeByte(6)
+      ..write(obj.medicationType)
+      ..writeByte(7)
+      ..write(obj.fdcType)
+      ..writeByte(8)
+      ..write(obj.tabletCount)
+      ..writeByte(9)
+      ..write(obj.frequencyPerWeek)
+      ..writeByte(10)
+      ..write(obj.scheduleDays);
   }
 
   @override
