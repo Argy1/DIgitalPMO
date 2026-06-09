@@ -19,6 +19,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _agreeToTerms = false;
   bool _isLoading = false;
+  String _role = 'patient'; // patient | pmo | doctor
   String? _nameError;
   String? _phoneError;
   String? _passwordError;
@@ -83,15 +84,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
         name: _nameController.text.trim(),
         phone: normalizePhoneNumber(_phoneController.text),
         password: _passwordController.text,
+        role: _role,
       );
       if (mounted) {
         final skipOtp = result['skip_otp'] as bool? ?? false;
+        final role = result['role'] as String? ?? _role;
         final phone = Uri.encodeComponent(
           normalizePhoneNumber(_phoneController.text),
         );
         final name = Uri.encodeComponent(_nameController.text.trim());
         if (skipOtp) {
-          context.go('/setup-profile/$phone/$name');
+          // PMO/dokter tidak melalui setup profil medis pasien.
+          if (role == 'pmo') {
+            context.go('/pmo/dashboard');
+          } else if (role == 'doctor') {
+            context.go('/home/dashboard');
+          } else {
+            context.go('/setup-profile/$phone/$name');
+          }
         } else {
           final devOtp = result['dev_otp'] as String?;
           if (devOtp != null && devOtp.isNotEmpty) {
@@ -266,6 +276,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       obscureText: true,
                       prefixIcon: Icons.lock_clock,
                       error: _confirmPasswordError,
+                    ),
+                    const SizedBox(height: 24),
+                    // Role selection
+                    Text(
+                      'Daftar sebagai:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _RoleCard(
+                      emoji: '🧑‍⚕️',
+                      title: 'Pasien TB',
+                      subtitle:
+                          'Saya pasien yang sedang menjalani pengobatan TB',
+                      value: 'patient',
+                      groupValue: _role,
+                      onTap: () => setState(() => _role = 'patient'),
+                    ),
+                    const SizedBox(height: 10),
+                    _RoleCard(
+                      emoji: '👨‍💼',
+                      title: 'Petugas PMO',
+                      subtitle:
+                          'Saya Pengawas Minum Obat yang mengawasi pasien TB',
+                      value: 'pmo',
+                      groupValue: _role,
+                      onTap: () => setState(() => _role = 'pmo'),
+                    ),
+                    const SizedBox(height: 10),
+                    _RoleCard(
+                      emoji: '👨‍⚕️',
+                      title: 'Dokter/Tenaga Medis',
+                      subtitle:
+                          'Saya dokter atau tenaga medis yang menangani pasien TB',
+                      value: 'doctor',
+                      groupValue: _role,
+                      onTap: () => setState(() => _role = 'doctor'),
                     ),
                     const SizedBox(height: 20),
                     // Terms and conditions checkbox
@@ -514,6 +564,102 @@ class _TermsCheckbox extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _RoleCard extends StatelessWidget {
+  final String emoji;
+  final String title;
+  final String subtitle;
+  final String value;
+  final String groupValue;
+  final VoidCallback onTap;
+
+  const _RoleCard({
+    required this.emoji,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.groupValue,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = value == groupValue;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isSelected ? AppColors.primary : const Color(0xFFD4ECE6),
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.05)
+              : Colors.white,
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 28)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: isSelected ? AppColors.primary : AppColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textMute,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected
+                      ? AppColors.primary
+                      : const Color(0xFFD4ECE6),
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? Center(
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

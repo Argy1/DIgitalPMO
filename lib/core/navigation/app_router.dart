@@ -143,6 +143,58 @@ final appRouter = GoRouter(
         );
       },
     ),
+    // ── PMO routes (akun Pengawas Minum Obat) ────────────────────────────────
+    GoRoute(
+      path: '/pmo/dashboard',
+      name: 'pmoDashboard',
+      pageBuilder: (context, state) => CustomTransitionPage(
+        child: const PMODashboardScreen(),
+        transitionDuration: const Duration(milliseconds: 200),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            child: child,
+          );
+        },
+      ),
+    ),
+    GoRoute(
+      path: '/pmo/link',
+      name: 'pmoLink',
+      pageBuilder: (context, state) => CustomTransitionPage(
+        child: const PMOLinkScreen(),
+        transitionDuration: const Duration(milliseconds: 300),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOutCubic,
+            ).drive(Tween(begin: const Offset(1, 0), end: Offset.zero)),
+            child: child,
+          );
+        },
+      ),
+    ),
+    GoRoute(
+      path: '/pmo/patient/:id',
+      name: 'pmoPatientDetail',
+      pageBuilder: (context, state) {
+        final id = state.pathParameters['id'] ?? '';
+        return CustomTransitionPage(
+          child: PMOPatientDetailScreen(patientId: id),
+          transitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeInOutCubic,
+              ).drive(Tween(begin: const Offset(1, 0), end: Offset.zero)),
+              child: child,
+            );
+          },
+        );
+      },
+    ),
     ShellRoute(
       builder: (context, state, child) => Scaffold(
         body: child,

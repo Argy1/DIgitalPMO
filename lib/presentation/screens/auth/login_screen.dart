@@ -60,8 +60,14 @@ class _LoginScreenState extends State<LoginScreen> {
       final profileData = await ApiService.instance.getMyProfile();
       final profile = profileData['patient_profile'] as Map<String, dynamic>?;
       final user = profileData['user'] as Map<String, dynamic>?;
+      final role = user?['role'] as String? ?? 'patient';
       if (!mounted) return;
-      if (profile == null) {
+      // PMO punya dashboard sendiri; tidak perlu setup profil medis pasien.
+      if (role == 'pmo') {
+        context.go('/pmo/dashboard');
+      } else if (role == 'doctor') {
+        context.go('/home/dashboard');
+      } else if (profile == null) {
         final phone = Uri.encodeComponent(
           normalizePhoneNumber(_phoneController.text),
         );

@@ -191,6 +191,7 @@ class ApiService {
     required String name,
     required String phone,
     required String password,
+    String role = 'patient',
   }) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
@@ -199,6 +200,7 @@ class ApiService {
           'name': name,
           'phone': normalizePhoneNumber(phone),
           'password': password,
+          'role': role,
         },
       );
       return res.data!;
@@ -236,10 +238,17 @@ class ApiService {
     required String gender,
     required String faksesName,
     required String doctorName,
-    required String tbType,
+    required String tbCategory, // "SO" atau "RO"
     required String treatmentStartDate,
+    String? tbSoType,
+    String? tbRoType,
+    int? treatmentDurationDays,
+    String? medicationType, // "FDC" atau "Kombinasi"
+    String? fdcType, // "FDC" atau "Kombipak"
+    List<String>? customMedications,
     double? weightKg,
     String? address,
+    bool? isPregnant,
   }) async {
     try {
       final body = <String, dynamic>{
@@ -247,11 +256,22 @@ class ApiService {
         'gender': gender,
         'faskes_name': faksesName,
         'doctor_name': doctorName,
-        'tb_type': tbType,
+        'tb_category': tbCategory,
         'treatment_start_date': treatmentStartDate,
       };
+      if (tbSoType != null) body['tb_so_type'] = tbSoType;
+      if (tbRoType != null) body['tb_ro_type'] = tbRoType;
+      if (treatmentDurationDays != null) {
+        body['treatment_duration_days'] = treatmentDurationDays;
+      }
+      if (medicationType != null) body['medication_type'] = medicationType;
+      if (fdcType != null) body['fdc_type'] = fdcType;
+      if (customMedications != null) {
+        body['custom_medications'] = customMedications;
+      }
       if (weightKg != null) body['weight_kg'] = weightKg;
       if (address != null) body['address'] = address;
+      if (isPregnant != null) body['is_pregnant'] = isPregnant;
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/patients/setup-profile',
         data: body,
@@ -599,6 +619,91 @@ class ApiService {
         '/api/v1/reports/generate-pdf/$year/$month',
       );
       return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
+
+  // ── PMO ───────────────────────────────────────────────────────────────────
+
+  /// Dashboard PMO: daftar pasien yang diawasi + ringkasan status harian.
+  Future<Map<String, dynamic>> getPMODashboard() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/pmo/dashboard',
+      );
+      return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
+
+  /// Detail seorang pasien yang diawasi PMO.
+  Future<Map<String, dynamic>> getPMOPatientDetail(String patientId) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/pmo/patients/$patientId',
+      );
+      return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
+
+  /// Generate QR token untuk di-scan pasien (berlaku 24 jam).
+  Future<Map<String, dynamic>> generatePMOQR() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/v1/pmo/generate-qr',
+      );
+      return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
+
+  /// PMO meminta link ke pasien via nomor HP.
+  Future<Map<String, dynamic>> requestPMOLink(String patientPhone) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/pmo/link/request',
+        data: {'patient_phone': normalizePhoneNumber(patientPhone)},
+      );
+      return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
+
+  /// Pasien menyetujui permintaan link dari PMO.
+  Future<Map<String, dynamic>> approvePMOLink(String linkRequestId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/pmo/link/approve/$linkRequestId',
+      );
+      return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
+
+  /// Pasien terhubung ke PMO via scan QR.
+  Future<Map<String, dynamic>> linkPMOViaQR(String qrToken) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/api/v1/pmo/link/qr',
+        data: {'qr_token': qrToken},
+      );
+      return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
+
+  /// Putus hubungan PMO-pasien.
+  Future<void> unlinkPMOPatient(String patientId) async {
+    try {
+      await _dio.delete<void>('/api/v1/pmo/unlink/$patientId');
     } on DioException catch (e) {
       _mapDioError(e);
     }

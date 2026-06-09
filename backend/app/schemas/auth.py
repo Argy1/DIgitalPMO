@@ -19,6 +19,7 @@ class RegisterRequest(BaseModel):
     name: str
     phone: str
     password: str
+    role: str = "patient"
 
     @field_validator("phone")
     @classmethod
@@ -32,12 +33,21 @@ class RegisterRequest(BaseModel):
             raise ValueError("Password minimal 6 karakter.")
         return v
 
+    @field_validator("role")
+    @classmethod
+    def _check_role(cls, v: str) -> str:
+        # Self-registration hanya boleh untuk role non-admin.
+        if v not in ("patient", "pmo", "doctor"):
+            raise ValueError("Role tidak valid. Pilih: patient, pmo, atau doctor.")
+        return v
+
 
 class RegisterResponse(BaseModel):
     message: str
     phone_masked: str
     dev_otp: Optional[str] = None
     skip_otp: bool = False
+    role: str = "patient"
 
 
 class LoginRequest(BaseModel):

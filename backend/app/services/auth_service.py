@@ -29,7 +29,12 @@ _BLACKLIST_PREFIX = "blacklist:"
 
 class AuthService:
     def register(
-        self, db: Session, full_name: str, phone_number: str, password: str
+        self,
+        db: Session,
+        full_name: str,
+        phone_number: str,
+        password: str,
+        role: str = "patient",
     ) -> tuple[User, str | None]:
         existing_user = self.get_user_by_phone(db, phone_number)
         if existing_user and existing_user.is_verified:
@@ -39,12 +44,14 @@ class AuthService:
             user = existing_user
             user.full_name = full_name
             user.password_hash = hash_password(password)
+            user.role = role
             logger.info("Restarting incomplete registration for %s", phone_number)
         else:
             user = User(
                 full_name=full_name,
                 phone_number=phone_number,
                 password_hash=hash_password(password),
+                role=role,
             )
             db.add(user)
 

@@ -73,7 +73,9 @@ def register(
     db: Session = Depends(get_db),
 ):
     """Register new user account and send OTP for verification."""
-    user, _otp = auth_service.register(db, body.name, body.phone, body.password)
+    user, _otp = auth_service.register(
+        db, body.name, body.phone, body.password, body.role
+    )
     _audit(db, "auth.register", user_id=user.id, entity_id=user.id, ip=_client_ip(request))
     db.commit()
     skip = get_settings().SKIP_OTP
@@ -82,6 +84,7 @@ def register(
         phone_masked=_mask_phone(body.phone),
         dev_otp=_otp,
         skip_otp=skip,
+        role=user.role,
     )
 
 
