@@ -28,6 +28,25 @@ _PHASE_INTENSIVE_DAYS = 56   # first 8 weeks
 _TREATMENT_TOTAL_DAYS = 180  # default fallback bila durasi tidak diisi dokter
 _TREATMENT_TOTAL_DAYS_RO = 730  # default fallback TB RO (~24 bulan)
 
+# Full drug names for custom medication combinations
+_DRUG_NAMES = {
+    "R": "Rifampicin",
+    "H": "Isoniazid",
+    "Z": "Pyrazinamide",
+    "E": "Ethambutol",
+}
+
+
+def _calculate_tablet_count(weight_kg: float) -> int:
+    """FDC tablet count berdasarkan berat badan (rekomendasi WHO)."""
+    if weight_kg < 38:
+        return 2
+    if weight_kg < 55:
+        return 3
+    if weight_kg <= 70:
+        return 4
+    return 5
+
 # Control schedule offsets (days from treatment_start_date)
 _CONTROL_DAYS = [
     (60,  "kontrol_1"),
@@ -146,13 +165,45 @@ def setup_profile(
     db.add(profile)
     db.flush()  # get profile.id before creating related records
 
-    # Medication schedule — use current phase regimen
+    # Medication schedule — phase regimen, extended with FDC/Kombinasi metadata
     regimen = _REGIMEN[current_phase]
+
+    if body.medication_type == "FDC":
+        # FDC: tablet count by weight; frequency depends on phase
+        tablet_count = (
+            _calculate_tablet_count(body.weight_kg) if body.weight_kg else None
+        )
+        if current_phase == "intensive":
+            freq_per_week = 7
+            sched_days = [1, 2, 3, 4, 5, 6, 7]
+        else:
+            freq_per_week = 3
+            sched_days = [1, 3, 5]  # Mon, Wed, Fri
+        schedule_meds = regimen["medications"]
+    elif body.medication_type == "Kombinasi" and body.custom_medications:
+        tablet_count = None
+        freq_per_week = 7
+        sched_days = [1, 2, 3, 4, 5, 6, 7]
+        schedule_meds = [
+            {"code": code, "name": _DRUG_NAMES.get(code, code)}
+            for code in body.custom_medications
+        ]
+    else:
+        tablet_count = None
+        freq_per_week = 7
+        sched_days = [1, 2, 3, 4, 5, 6, 7]
+        schedule_meds = regimen["medications"]
+
     schedule = MedicationSchedule(
         patient_id=profile.id,
         phase=current_phase,
-        medications=regimen["medications"],
+        medications=schedule_meds,
         schedule_times=regimen["schedule_times"],
+        medication_type=body.medication_type,
+        fdc_type=body.fdc_type,
+        tablet_count=tablet_count,
+        frequency_per_week=freq_per_week,
+        schedule_days=sched_days,
         reminder_before=30,
         is_active=True,
     )

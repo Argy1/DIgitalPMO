@@ -25,6 +25,17 @@ router = APIRouter(prefix="/api/v1/medications", tags=["medications"])
 logger = logging.getLogger(__name__)
 
 
+def calculate_tablet_count(weight_kg: float) -> int:
+    """FDC tablet count berdasarkan berat badan pasien (rekomendasi WHO)."""
+    if weight_kg < 38:
+        return 2
+    if weight_kg < 55:
+        return 3
+    if weight_kg <= 70:
+        return 4
+    return 5
+
+
 def _serialize_log(log: MedicationLog) -> dict:
     return MedicationLogResponse.model_validate(log).model_dump(mode="json")
 

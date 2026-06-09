@@ -12,7 +12,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import limiter
-from app.api.routes import auth, patients, medications, symptoms, side_effects, ai, reports, education, notifications, support
+from app.api.routes import auth, patients, medications, symptoms, side_effects, ai, reports, education, notifications, support, pmo
 from app.core.config import get_settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 
@@ -217,6 +217,7 @@ app.include_router(reports.router)
 app.include_router(education.router)
 app.include_router(notifications.router)
 app.include_router(support.router)
+app.include_router(pmo.router)
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
