@@ -78,12 +78,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final dayMap = <int, _DayStatus>{};
       final histDays = histData['days'] as List<dynamic>? ?? [];
       for (final d in histDays) {
-        final dateStr = (d as Map<String, dynamic>)['date'] as String;
+        final dateStr = (d as Map<String, dynamic>)['date'] as String?;
+        if (dateStr == null) continue;
         final day = int.tryParse(dateStr.split('-').last) ?? 0;
         final logs = d['logs'] as List<dynamic>? ?? [];
         if (logs.isEmpty) continue;
         final statuses = logs
-            .map((l) => (l as Map<String, dynamic>)['status'] as String)
+            .whereType<Map<String, dynamic>>()
+            .map((l) => l['status'] as String? ?? '')
             .toList();
         if (statuses.contains('confirmed')) {
           dayMap[day] = _DayStatus.confirmed;
@@ -93,9 +95,24 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           dayMap[day] = _DayStatus.missed;
         }
       }
+
+      // Ambil treatment_start_date untuk kalender — hari sebelum mulai berobat = future (netral)
+      DateTime? treatmentStart;
+      final profileForCal = (results[1])['patient_profile'] as Map<String, dynamic>?;
+      if (profileForCal != null) {
+        final s = profileForCal['treatment_start_date'] as String?;
+        if (s != null) treatmentStart = DateTime.tryParse(s);
+      }
+
       final calDays = List.generate(daysInMonth, (i) {
         final day = i + 1;
+        final date = DateTime(now.year, now.month, day);
+        // Hari di masa depan = future
         if (day > now.day) return _DayStatus.future;
+        // Hari sebelum mulai berobat = future (belum mulai)
+        if (treatmentStart != null && date.isBefore(DateTime(treatmentStart.year, treatmentStart.month, treatmentStart.day))) {
+          return _DayStatus.future;
+        }
         return dayMap[day] ?? _DayStatus.missed;
       });
 

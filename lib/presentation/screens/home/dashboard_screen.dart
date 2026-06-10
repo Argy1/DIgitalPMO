@@ -204,7 +204,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         _checkPhaseTransition();
         _checkTreatmentCompletion();
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[Dashboard] ERROR: $e');
+      debugPrint('[Dashboard] STACK: $stack');
       if (mounted) {
         setState(() {
           _isLoading = false;

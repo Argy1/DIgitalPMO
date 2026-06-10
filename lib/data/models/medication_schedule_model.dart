@@ -66,9 +66,9 @@ class MedicationScheduleModel {
     }
 
     return MedicationScheduleModel(
-      id: json['id'] as String,
-      patientId: json['patientId'] as String? ??
-          json['patient_id'] as String? ??
+      id: json['id']?.toString() ?? '',
+      patientId: json['patientId']?.toString() ??
+          json['patient_id']?.toString() ??
           '',
       phase: json['phase'] as String? ?? 'intensive',
       medications: parseMedications(json['medications']),
