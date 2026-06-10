@@ -130,9 +130,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         _progress = (_dayNumber / _totalDays).clamp(0.0, 1.0);
       }
 
-      _streak = todayData['streak_count'] as int? ?? 0;
-      final logs = todayData['logs'] as List<dynamic>? ?? [];
-      final confirmedLog = logs.cast<Map<String, dynamic>>().firstWhere(
+      _streak = (todayData['streak_count'] as num?)?.toInt() ?? 0;
+      final logs = (todayData['logs'] as List<dynamic>?) ?? [];
+      final confirmedLog = logs.whereType<Map<String, dynamic>>().firstWhere(
         (log) => log['status'] == 'confirmed',
         orElse: () => {},
       );
@@ -153,11 +153,11 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (schedule != null) {
         _medicationType = schedule['medication_type'] as String?;
         _fdcType = schedule['fdc_type'] as String?;
-        _tabletCount = schedule['tablet_count'] as int?;
-        _frequencyPerWeek = schedule['frequency_per_week'] as int? ?? 7;
+        _tabletCount = (schedule['tablet_count'] as num?)?.toInt();
+        _frequencyPerWeek = (schedule['frequency_per_week'] as num?)?.toInt() ?? 7;
         final rawDays = schedule['schedule_days'];
-        if (rawDays is List) {
-          _scheduleDays = rawDays.cast<int>();
+        if (rawDays is List && rawDays.isNotEmpty) {
+          _scheduleDays = rawDays.map((e) => (e as num).toInt()).toList();
         }
         // Check if today is a scheduled day (1=Mon … 7=Sun, matches DateTime.weekday)
         if (_frequencyPerWeek < 7 && _scheduleDays.isNotEmpty) {
@@ -181,15 +181,15 @@ class _DashboardScreenState extends State<DashboardScreen>
         unawaited(NotificationService.instance.scheduleAll(scheduleModel));
       }
 
-      final historyDays = historyData['days'] as List<dynamic>? ?? [];
+      final historyDays = (historyData['days'] as List<dynamic>?) ?? [];
       int confirmed = 0;
       int total = 0;
       for (final day in historyDays) {
-        final dayLogs =
-            (day as Map<String, dynamic>)['logs'] as List<dynamic>? ?? [];
+        if (day is! Map<String, dynamic>) continue;
+        final dayLogs = (day['logs'] as List<dynamic>?) ?? [];
         total += dayLogs.length;
         for (final log in dayLogs) {
-          if ((log as Map<String, dynamic>)['status'] == 'confirmed') {
+          if (log is Map<String, dynamic> && log['status'] == 'confirmed') {
             confirmed++;
           }
         }

@@ -23,6 +23,11 @@ class MedicationScheduleResponse(BaseModel):
     reminder_before: int
     is_active: bool
     created_at: datetime
+    medication_type: Optional[str] = None
+    fdc_type: Optional[str] = None
+    tablet_count: Optional[int] = None
+    frequency_per_week: int = 7
+    schedule_days: List[int] = []
 
 
 class MedicationLogCreate(BaseModel):

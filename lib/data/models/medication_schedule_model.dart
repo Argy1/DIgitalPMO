@@ -77,21 +77,26 @@ class MedicationScheduleModel {
           : (json['schedule_times'] != null
               ? List<String>.from(json['schedule_times'] as List)
               : []),
-      reminderBefore: json['reminderBefore'] as int? ??
-          json['reminder_before'] as int? ??
-          15,
+      reminderBefore: (json['reminderBefore'] as num? ??
+              json['reminder_before'] as num? ??
+              15)
+          .toInt(),
       medicationType: json['medicationType'] as String? ??
           json['medication_type'] as String?,
       fdcType: json['fdcType'] as String? ?? json['fdc_type'] as String?,
-      tabletCount: json['tabletCount'] as int? ?? json['tablet_count'] as int?,
-      frequencyPerWeek: json['frequencyPerWeek'] as int? ??
-          json['frequency_per_week'] as int? ??
-          7,
-      scheduleDays: json['scheduleDays'] != null
-          ? List<int>.from(json['scheduleDays'] as List)
-          : (json['schedule_days'] != null
-              ? List<int>.from(json['schedule_days'] as List)
-              : null),
+      tabletCount: (json['tabletCount'] as num? ?? json['tablet_count'] as num?)
+          ?.toInt(),
+      frequencyPerWeek: (json['frequencyPerWeek'] as num? ??
+              json['frequency_per_week'] as num? ??
+              7)
+          .toInt(),
+      scheduleDays: (() {
+        final raw = json['scheduleDays'] ?? json['schedule_days'];
+        if (raw is List && raw.isNotEmpty) {
+          return raw.map((e) => (e as num).toInt()).toList();
+        }
+        return null;
+      })(),
     );
   }
 
