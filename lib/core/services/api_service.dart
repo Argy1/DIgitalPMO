@@ -203,7 +203,22 @@ class ApiService {
           'role': role,
         },
       );
-      return res.data!;
+      final data = res.data!;
+      // When OTP is skipped the backend returns tokens immediately — save them
+      // so subsequent API calls (e.g. setup-profile) are authenticated.
+      if (data['skip_otp'] == true &&
+          data['access_token'] != null &&
+          data['refresh_token'] != null) {
+        await _storage.write(
+          key: _tokenKey,
+          value: data['access_token'] as String,
+        );
+        await _storage.write(
+          key: 'refresh_token',
+          value: data['refresh_token'] as String,
+        );
+      }
+      return data;
     } on DioException catch (e) {
       _mapDioError(e);
     }

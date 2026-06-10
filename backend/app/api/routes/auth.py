@@ -79,8 +79,23 @@ def register(
     _audit(db, "auth.register", user_id=user.id, entity_id=user.id, ip=_client_ip(request))
     db.commit()
     skip = get_settings().SKIP_OTP
+    if skip:
+        # When OTP is skipped, mark user as verified and return tokens immediately
+        # so the client can call /setup-profile without a separate login step.
+        user.is_verified = True
+        db.commit()
+        tokens = auth_service.create_tokens(user)
+        return {
+            **tokens,
+            "user": UserResponse.model_validate(user).model_dump(),
+            "message": "Registrasi berhasil.",
+            "phone_masked": _mask_phone(body.phone),
+            "dev_otp": _otp,
+            "skip_otp": True,
+            "role": user.role,
+        }
     return RegisterResponse(
-        message="Registrasi berhasil." if skip else "Registrasi berhasil. Kode OTP telah dikirim ke nomor Anda.",
+        message="Registrasi berhasil. Kode OTP telah dikirim ke nomor Anda.",
         phone_masked=_mask_phone(body.phone),
         dev_otp=_otp,
         skip_otp=skip,

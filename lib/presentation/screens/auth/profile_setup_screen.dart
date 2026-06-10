@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/utils/tb_calculator.dart';
 import '../../../core/widgets/pmo_button.dart';
 import '../../../core/widgets/pmo_card.dart';
 
@@ -355,6 +354,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     },
                     onFinish: _finishSetup,
                     isLoading: _isLoading,
+                    medicationType: _medicationType,
+                    fdcType: _fdcType,
+                    customMeds: _customMeds,
+                    durationDays: int.tryParse(_durationController.text.trim()),
                   ),
                 ],
               ),
@@ -1000,6 +1003,10 @@ class _Step3MedicationSchedule extends StatelessWidget {
   final Function(String, bool) onReminderChanged;
   final VoidCallback onFinish;
   final bool isLoading;
+  final String? medicationType;
+  final String? fdcType;
+  final Map<String, bool> customMeds;
+  final int? durationDays;
 
   const _Step3MedicationSchedule({
     required this.treatmentStartDate,
@@ -1009,15 +1016,41 @@ class _Step3MedicationSchedule extends StatelessWidget {
     required this.onReminderChanged,
     required this.onFinish,
     this.isLoading = false,
+    this.medicationType,
+    this.fdcType,
+    this.customMeds = const {},
+    this.durationDays,
   });
+
+  String get _medLabel {
+    if (medicationType == 'FDC') return fdcType ?? 'FDC';
+    if (medicationType == 'Kombinasi') {
+      final selected = customMeds.entries
+          .where((e) => e.value)
+          .map((e) => e.key)
+          .toList();
+      return selected.isEmpty ? 'Kombinasi' : selected.join(' + ');
+    }
+    return 'RHZE';
+  }
+
+  String get _phaseLabel {
+    final days = durationDays ?? 180;
+    final intensiveDays = days <= 180 ? 56 : 84; // 2 bln SO, 3 bln RO
+    final continuationDays = days - intensiveDays;
+    return 'Intensif ${intensiveDays ~/ 30} bln → Lanjutan ${continuationDays ~/ 30} bln';
+  }
+
+  String get _estimasiSelesai {
+    final start = treatmentStartDate ?? DateTime.now();
+    final days = durationDays ?? 180;
+    final end = start.add(Duration(days: days));
+    const bulan = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    return '${end.day} ${bulan[end.month - 1]} ${end.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final startDate = treatmentStartDate ?? DateTime.now();
-    final dayNumber = TBCalculator.getDayNumber(startDate, DateTime.now());
-    final currentPhase = TBCalculator.getCurrentPhase(dayNumber);
-    final medications = TBCalculator.getMedicationsForPhase(currentPhase);
-
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
       child: Column(
@@ -1028,47 +1061,36 @@ class _Step3MedicationSchedule extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 20),
+
+          // Ringkasan pengobatan
           PMOCard(
+            backgroundColor: AppColors.tealSoft,
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Obat-obatan:',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textMute,
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.medication_rounded, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Ringkasan Pengobatan',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: medications
-                      .map(
-                        (med) => Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: Chip(
-                            label: Text(med),
-                            backgroundColor: AppColors.primary.withValues(
-                              alpha: 0.1,
-                            ),
-                            labelStyle: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Sesuai protokol TB Indonesia',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textMute,
-                  ),
-                ),
+                _InfoRow(label: 'Jenis Obat', value: _medLabel),
+                const SizedBox(height: 6),
+                _InfoRow(label: 'Durasi', value: '${durationDays ?? 180} hari'),
+                const SizedBox(height: 6),
+                _InfoRow(label: 'Fase', value: _phaseLabel),
+                const SizedBox(height: 6),
+                _InfoRow(label: 'Estimasi Selesai', value: _estimasiSelesai),
               ],
             ),
           ),
@@ -1807,6 +1829,43 @@ class _MedCheckbox extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textMute,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

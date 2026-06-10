@@ -376,7 +376,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
-class _RegisterInput extends StatelessWidget {
+class _RegisterInput extends StatefulWidget {
   final String label;
   final String hint;
   final TextEditingController controller;
@@ -398,18 +398,31 @@ class _RegisterInput extends StatelessWidget {
   });
 
   @override
+  State<_RegisterInput> createState() => _RegisterInputState();
+}
+
+class _RegisterInputState extends State<_RegisterInput> {
+  late bool _obscured;
+
+  @override
+  void initState() {
+    super.initState();
+    _obscured = widget.obscureText;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          obscureText: obscureText,
-          onChanged: onChanged,
+          controller: widget.controller,
+          keyboardType: widget.keyboardType,
+          obscureText: _obscured,
+          onChanged: widget.onChanged,
           decoration: InputDecoration(
-            labelText: label,
-            hintText: hint,
+            labelText: widget.label,
+            hintText: widget.hint,
             floatingLabelBehavior: FloatingLabelBehavior.auto,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
@@ -420,7 +433,7 @@ class _RegisterInput extends StatelessWidget {
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: error != null
+                color: widget.error != null
                     ? AppColors.danger
                     : const Color(0xFFD4ECE6),
                 width: 1,
@@ -429,7 +442,7 @@ class _RegisterInput extends StatelessWidget {
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: error != null
+                color: widget.error != null
                     ? AppColors.danger
                     : const Color(0xFFD4ECE6),
                 width: 1,
@@ -438,26 +451,40 @@ class _RegisterInput extends StatelessWidget {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide(
-                color: error != null ? AppColors.danger : AppColors.primary,
+                color: widget.error != null
+                    ? AppColors.danger
+                    : AppColors.primary,
                 width: 2,
               ),
             ),
             prefixIcon: Icon(
-              prefixIcon,
-              color: error != null ? AppColors.danger : AppColors.primary,
+              widget.prefixIcon,
+              color: widget.error != null ? AppColors.danger : AppColors.primary,
               size: 20,
             ),
+            suffixIcon: widget.obscureText
+                ? GestureDetector(
+                    onTap: () => setState(() => _obscured = !_obscured),
+                    child: Icon(
+                      _obscured ? Icons.visibility_off : Icons.visibility,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  )
+                : null,
             labelStyle: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: error != null ? AppColors.danger : AppColors.textMute,
+              color: widget.error != null
+                  ? AppColors.danger
+                  : AppColors.textMute,
             ),
           ),
         ),
-        if (error != null) ...[
+        if (widget.error != null) ...[
           const SizedBox(height: 8),
           Text(
-            error!,
+            widget.error!,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
