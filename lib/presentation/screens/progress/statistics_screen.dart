@@ -128,7 +128,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       }
 
       // Streak from today data
-      final streak = todayData['streak_count'] as int? ?? 0;
+      final streak = (todayData['streak_count'] as num?)?.toInt() ?? 0;
 
       // Phase progress from profile
       double lanjutanProg = 0.0;

@@ -61,8 +61,8 @@ class _MedicationConfirmScreenState extends State<MedicationConfirmScreen>
       if (schedule == null) return;
       final medType = schedule['medication_type'] as String?;
       final fdc = schedule['fdc_type'] as String?;
-      final count = schedule['tablet_count'] as int?;
-      final freq = schedule['frequency_per_week'] as int? ?? 7;
+      final count = (schedule['tablet_count'] as num?)?.toInt();
+      final freq = (schedule['frequency_per_week'] as num?)?.toInt() ?? 7;
       final ph = schedule['phase'] as String? ?? 'intensive';
       final rawMeds = schedule['medications'];
       List<String> meds;

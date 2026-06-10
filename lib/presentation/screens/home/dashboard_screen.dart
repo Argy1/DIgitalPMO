@@ -11,6 +11,7 @@ import '../../../core/widgets/pmo_med_pill.dart';
 import '../../../core/widgets/pmo_shimmer.dart';
 import '../../../core/widgets/pmo_empty_state.dart';
 import '../../../core/utils/tb_calculator.dart';
+import '../../../data/education/education_articles.dart';
 import '../../../data/models/app_state_model.dart';
 import 'widgets/hospitalized_banner.dart';
 import 'widgets/milestone_widget.dart';
@@ -55,6 +56,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   int _dayNumber = 1;
   final int _totalDays = 180;
   int _daysRemaining = 180;
+  DateTime? _treatmentStartDate;
+  String? _faskes;
 
   int _adherence = 0;
   int _confirmedDoses = 0;
@@ -122,9 +125,11 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       _phase = profile['current_phase'] as String? ?? 'intensive';
       _isHospitalized = profile['is_hospitalized'] as bool? ?? false;
+      _faskes = profile['faskes_name'] as String?;
       final startStr = profile['treatment_start_date'] as String?;
       final startDate = startStr == null ? null : DateTime.tryParse(startStr);
       if (startDate != null) {
+        _treatmentStartDate = startDate;
         _dayNumber = TBCalculator.getDayNumber(startDate, now);
         _daysRemaining = (_totalDays - _dayNumber).clamp(0, _totalDays);
         _progress = (_dayNumber / _totalDays).clamp(0.0, 1.0);
@@ -452,11 +457,26 @@ class _DashboardScreenState extends State<DashboardScreen>
         _animCard(_AIChatCard(onTap: () => context.go('/home/ai-chat')), 3),
         const SizedBox(height: 14),
         _animCard(
-          _DoctorVisitCard(onTap: () => context.push('/control/detail/1')),
+          _DoctorVisitCard(
+            startDate: _treatmentStartDate,
+            faskes: _faskes,
+            onTap: () => context.push('/control/detail/1'),
+          ),
           4,
         ),
         const SizedBox(height: 14),
-        _animCard(_EducationCard(onTap: () => context.push('/education/1')), 5),
+        _animCard(
+          _EducationCard(
+            article: educationArticles.isNotEmpty ? educationArticles.first : null,
+            onTap: () {
+              final id = educationArticles.isNotEmpty
+                  ? educationArticles.first.id
+                  : '1';
+              context.push('/education/$id');
+            },
+          ),
+          5,
+        ),
       ],
     );
   }
@@ -1628,12 +1648,62 @@ class _AIChatCard extends StatelessWidget {
 
 // ── Doctor visit ─────────────────────────────────────────────
 class _DoctorVisitCard extends StatelessWidget {
+  final DateTime? startDate;
+  final String? faskes;
   final VoidCallback onTap;
 
-  const _DoctorVisitCard({required this.onTap});
+  const _DoctorVisitCard({
+    required this.onTap,
+    this.startDate,
+    this.faskes,
+  });
+
+  static const _controlDays = [60, 150, 180];
+  static const _monthsShort = [
+    'JAN','FEB','MAR','APR','MEI','JUN',
+    'JUL','AGS','SEP','OKT','NOV','DES',
+  ];
+
+  /// Cari jadwal kontrol berikutnya berdasarkan treatment_start_date.
+  /// Kontrol di hari ke-60, 150, 180 dari tanggal mulai.
+  Map<String, dynamic>? _nextControl() {
+    if (startDate == null) return null;
+    final today = DateTime.now();
+    for (final day in _controlDays) {
+      final controlDate = startDate!.add(Duration(days: day - 1));
+      if (!controlDate.isBefore(DateTime(today.year, today.month, today.day))) {
+        final daysLeft = controlDate.difference(
+          DateTime(today.year, today.month, today.day),
+        ).inDays;
+        return {
+          'date': controlDate,
+          'days_left': daysLeft,
+          'label': day == 60
+              ? 'Kontrol Akhir Fase Intensif'
+              : day == 150
+                  ? 'Kontrol Evaluasi Lanjutan'
+                  : 'Kontrol Selesai Pengobatan',
+        };
+      }
+    }
+    return null; // semua kontrol sudah lewat
+  }
 
   @override
   Widget build(BuildContext context) {
+    final ctrl = _nextControl();
+    final date = ctrl?['date'] as DateTime?;
+    final daysLeft = ctrl?['days_left'] as int? ?? 0;
+    final label = ctrl?['label'] as String? ?? 'Kontrol Rutin Dokter';
+    final dayStr = date != null ? '${date.day}' : '--';
+    final monStr = date != null ? _monthsShort[date.month - 1] : '---';
+    final countdownStr = daysLeft == 0
+        ? 'Hari ini!'
+        : daysLeft == 1
+            ? 'Besok'
+            : '$daysLeft hari lagi';
+    final faskesStr = faskes != null ? '$faskes' : 'Fasilitas Kesehatan';
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1659,15 +1729,17 @@ class _DoctorVisitCard extends StatelessWidget {
                 width: 60,
                 height: 64,
                 decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
+                  gradient: daysLeft == 0
+                      ? const LinearGradient(colors: [AppColors.danger, Color(0xFFB71C1C)])
+                      : AppColors.primaryGradient,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      '20',
-                      style: TextStyle(
+                    Text(
+                      dayStr,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
@@ -1677,7 +1749,7 @@ class _DoctorVisitCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'JUN',
+                      monStr,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.8),
                         fontSize: 10,
@@ -1694,7 +1766,7 @@ class _DoctorVisitCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'KUNJUNGAN BERIKUTNYA',
+                      ctrl != null ? 'KUNJUNGAN BERIKUTNYA' : 'PENGOBATAN SELESAI',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -1703,10 +1775,10 @@ class _DoctorVisitCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    const Text(
-                      'Kontrol Rutin Dokter',
-                      style: TextStyle(
-                        fontSize: 16,
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 15,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.2,
                         color: AppColors.text,
@@ -1714,31 +1786,33 @@ class _DoctorVisitCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'RSUD Cipto · 09:30',
+                      faskesStr,
                       style: TextStyle(fontSize: 12, color: AppColors.textMute),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.amberSoft,
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: const Text(
-                  '11 hari lagi',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFFA66A00),
+              if (ctrl != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: daysLeft == 0
+                        ? AppColors.danger.withValues(alpha: 0.1)
+                        : AppColors.amberSoft,
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(
+                    countdownStr,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: daysLeft == 0
+                          ? AppColors.danger
+                          : const Color(0xFFA66A00),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
@@ -1749,12 +1823,16 @@ class _DoctorVisitCard extends StatelessWidget {
 
 // ── Education card ───────────────────────────────────────────
 class _EducationCard extends StatelessWidget {
+  final EducationArticle? article;
   final VoidCallback onTap;
 
-  const _EducationCard({required this.onTap});
+  const _EducationCard({required this.onTap, this.article});
 
   @override
   Widget build(BuildContext context) {
+    final title = article?.title ?? 'Kenapa Tidak Boleh Berhenti Walau Sudah Sehat?';
+    final minutes = article?.readMinutes ?? 3;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1787,7 +1865,7 @@ class _EducationCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'EDUKASI HARI INI',
                       style: TextStyle(
                         fontSize: 11,
@@ -1797,9 +1875,11 @@ class _EducationCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    const Text(
-                      'Kenapa obat TB tidak boleh putus?',
-                      style: TextStyle(
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.2,
@@ -1808,8 +1888,8 @@ class _EducationCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Baca artikel · 2 menit',
-                      style: TextStyle(fontSize: 12, color: AppColors.textMute),
+                      'Baca artikel · $minutes menit',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMute),
                     ),
                   ],
                 ),

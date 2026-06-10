@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimensions.dart';
 import '../../../core/widgets/pmo_button.dart';
@@ -46,7 +47,6 @@ class _ControlDetailScreenState extends State<ControlDetailScreen> {
 
   Future<void> _loadData() async {
     final box = await Hive.openBox('control_settings');
-    final startStr = box.get('start_date') as String?;
     final completedRaw = box.get('completed_ids');
     final datesRaw = box.get('completed_dates');
 
@@ -68,9 +68,28 @@ class _ControlDetailScreenState extends State<ControlDetailScreen> {
       }
     }
 
+    // Ambil treatment_start_date dari API profil (sumber kebenaran utama)
+    DateTime? startFromApi;
+    try {
+      final profileData = await ApiService.instance.getMyProfile();
+      final profile = profileData['patient_profile'] as Map<String, dynamic>?;
+      final s = profile?['treatment_start_date'] as String?;
+      if (s != null) {
+        startFromApi = DateTime.tryParse(s);
+        // Simpan ke Hive agar tersedia offline
+        if (startFromApi != null) {
+          await box.put('start_date', startFromApi.toIso8601String());
+        }
+      }
+    } catch (_) {
+      // Fallback ke Hive cache jika offline
+      final cached = box.get('start_date') as String?;
+      if (cached != null) startFromApi = DateTime.tryParse(cached);
+    }
+
     if (mounted) {
       setState(() {
-        if (startStr != null) _startDate = DateTime.parse(startStr);
+        if (startFromApi != null) _startDate = startFromApi;
         _completedIds = completed;
         _completedDates = completedDates;
         _reminderToggles = toggles;
