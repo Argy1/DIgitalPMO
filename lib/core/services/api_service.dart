@@ -60,7 +60,9 @@ Dio _buildDio() {
 }
 
 class _AuthInterceptor extends Interceptor {
-  final _storage = const FlutterSecureStorage();
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   @override
   Future<void> onRequest(
@@ -183,7 +185,9 @@ class ApiService {
   static final ApiService instance = ApiService._();
 
   final Dio _dio;
-  final _storage = const FlutterSecureStorage();
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -194,6 +198,10 @@ class ApiService {
     String role = 'patient',
   }) async {
     try {
+      // Clear any stale tokens before registering a new account.
+      await _storage.delete(key: _tokenKey);
+      await _storage.delete(key: 'refresh_token');
+
       final res = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/register',
         data: {
@@ -206,17 +214,16 @@ class ApiService {
       final data = res.data!;
       // When OTP is skipped the backend returns tokens immediately — save them
       // so subsequent API calls (e.g. setup-profile) are authenticated.
+      final accessToken = data['access_token'];
+      final refreshToken = data['refresh_token'];
       if (data['skip_otp'] == true &&
-          data['access_token'] != null &&
-          data['refresh_token'] != null) {
-        await _storage.write(
-          key: _tokenKey,
-          value: data['access_token'] as String,
-        );
-        await _storage.write(
-          key: 'refresh_token',
-          value: data['refresh_token'] as String,
-        );
+          accessToken != null &&
+          refreshToken != null) {
+        await _storage.write(key: _tokenKey, value: accessToken as String);
+        await _storage.write(key: 'refresh_token', value: refreshToken as String);
+        // Verify write succeeded.
+        final saved = await _storage.read(key: _tokenKey);
+        assert(saved != null, 'Token write failed after register');
       }
       return data;
     } on DioException catch (e) {
