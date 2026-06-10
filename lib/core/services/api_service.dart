@@ -795,4 +795,26 @@ class ApiService {
       _mapDioError(e);
     }
   }
+
+  /// Pasien mendapatkan info PMO yang mengawasi mereka (atau {linked: false}).
+  Future<Map<String, dynamic>> getMyPMO() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>('/api/v1/pmo/my-pmo');
+      return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
+
+  /// Pasien menolak permintaan link dari PMO.
+  Future<Map<String, dynamic>> rejectPMOLink(String linkRequestId) async {
+    try {
+      final res = await _dio.delete<Map<String, dynamic>>(
+        '/api/v1/pmo/link/reject/$linkRequestId',
+      );
+      return res.data!;
+    } on DioException catch (e) {
+      _mapDioError(e);
+    }
+  }
 }

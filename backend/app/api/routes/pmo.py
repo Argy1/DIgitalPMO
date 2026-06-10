@@ -399,6 +399,34 @@ def approve_patient_link(
     )
 
 
+# ── DELETE /link/reject/{link_request_id} ────────────────────────────────────
+
+@router.delete("/link/reject/{link_request_id}")
+def reject_patient_link(
+    link_request_id: str,
+    current_patient: PatientProfile = Depends(get_current_patient),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Pasien menolak permintaan pengawasan dari PMO."""
+    raw = redis_client.get(f"{_LINK_REQ_PREFIX}{link_request_id}")
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Permintaan tidak ditemukan atau sudah kedaluwarsa.",
+        )
+
+    data = json.loads(raw)
+    if data["patient_id"] != str(current_patient.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permintaan ini bukan untuk akun Anda.",
+        )
+
+    redis_client.delete(f"{_LINK_REQ_PREFIX}{link_request_id}")
+    logger.info("PMO link rejected: request %s by patient %s", link_request_id, current_patient.id)
+    return {"message": "Permintaan pengawasan berhasil ditolak."}
+
+
 # ── POST /link/qr ─────────────────────────────────────────────────────────────
 
 @router.post("/link/qr", response_model=PMOLinkResponse)
@@ -466,6 +494,48 @@ def link_via_qr(
         patient_name=current_patient.user.full_name,
         message=f"Berhasil terhubung dengan PMO {pmo_user.full_name}.",
     )
+
+
+# ── GET /my-pmo ───────────────────────────────────────────────────────────────
+
+@router.get("/my-pmo")
+def get_my_pmo(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Pasien mendapatkan info PMO yang saat ini mengawasi mereka."""
+    if current_user.role != "patient":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hanya pasien yang dapat mengakses resource ini.",
+        )
+    patient = (
+        db.query(PatientProfile)
+        .filter(PatientProfile.user_id == current_user.id)
+        .first()
+    )
+    if not patient:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profil pasien tidak ditemukan.",
+        )
+    link = (
+        db.query(PMOPatient)
+        .filter(PMOPatient.patient_id == patient.id, PMOPatient.is_active == True)
+        .first()
+    )
+    if not link:
+        return {"linked": False}
+
+    pmo_user = db.query(User).filter(User.id == link.pmo_user_id).first()
+    return {
+        "linked": True,
+        "pmo_name": pmo_user.full_name if pmo_user else "PMO",
+        "pmo_phone": pmo_user.phone_number if pmo_user else None,
+        "linked_via": link.linked_via,
+        "linked_at": link.linked_at.isoformat(),
+        "patient_id": str(patient.id),
+    }
 
 
 # ── GET /generate-qr ──────────────────────────────────────────────────────────

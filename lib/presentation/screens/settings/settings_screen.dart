@@ -48,6 +48,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _phase = '-';
   DateTime _startDate = DateTime.now();
 
+  // PMO link info
+  bool _pmoLinked = false;
+  String _pmoName = '';
+  String? _pmoPhone;
+  String _patientId = '';
+  bool _pmoLoading = true;
+
   // Hospitalized mode
   bool _isHospitalized = false;
 
@@ -63,6 +70,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadPrefs();
     _loadVersion();
     _loadProfile();
+    _loadPMOInfo();
   }
 
   Future<void> _loadProfile() async {
@@ -82,6 +90,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       });
     } catch (_) {}
+  }
+
+  Future<void> _loadPMOInfo() async {
+    try {
+      final data = await ApiService.instance.getMyPMO();
+      if (!mounted) return;
+      setState(() {
+        _pmoLinked = data['linked'] as bool? ?? false;
+        _pmoName = data['pmo_name'] as String? ?? '';
+        _pmoPhone = data['pmo_phone'] as String?;
+        _patientId = data['patient_id'] as String? ?? '';
+        _pmoLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _pmoLoading = false);
+    }
   }
 
   Future<void> _loadPrefs() async {
@@ -255,6 +279,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     setState(() => _biometricEnabled = value);
     await _savePref('biometric_enabled', value);
+  }
+
+  void _showUnlinkPMODialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Putus Hubungan PMO?'),
+        content: Text(
+          'PMO $_pmoName tidak akan lagi bisa memantau pengobatan Anda.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ApiService.instance.unlinkPMOPatient(_patientId);
+                if (mounted) {
+                  setState(() {
+                    _pmoLinked = false;
+                    _pmoName = '';
+                    _pmoPhone = null;
+                    _patientId = '';
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Hubungan PMO berhasil diputus.'),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(apiErrorMessage(e))),
+                  );
+                }
+              }
+            },
+            child: const Text(
+              'Putus',
+              style: TextStyle(color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showDeleteDataDialog() {
@@ -471,6 +544,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         showDivider: false,
                         valueColor: _isHospitalized ? AppColors.amber : null,
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── Petugas PMO ────────────────────────────────────────
+                  _SectionCard(
+                    title: 'Petugas PMO',
+                    children: [
+                      if (_pmoLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      else if (_pmoLinked)
+                        ...[
+                          _SettingsTile(
+                            icon: Icons.supervisor_account_rounded,
+                            label: 'Nama PMO',
+                            value: _pmoName,
+                            isReadOnly: true,
+                          ),
+                          if (_pmoPhone != null)
+                            _SettingsTile(
+                              icon: Icons.phone_outlined,
+                              label: 'Nomor HP PMO',
+                              value: _pmoPhone,
+                              isReadOnly: true,
+                            ),
+                          _SettingsTile(
+                            icon: Icons.link_off,
+                            label: 'Putus Hubungan PMO',
+                            labelColor: AppColors.danger,
+                            onTap: _showUnlinkPMODialog,
+                            showDivider: false,
+                          ),
+                        ]
+                      else
+                        _SettingsTile(
+                          icon: Icons.person_search_outlined,
+                          label: 'Belum ada PMO',
+                          value: 'Tidak terhubung',
+                          isReadOnly: true,
+                          showDivider: false,
+                        ),
                     ],
                   ),
                   const SizedBox(height: 12),

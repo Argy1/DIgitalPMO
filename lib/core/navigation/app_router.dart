@@ -176,6 +176,30 @@ final appRouter = GoRouter(
       ),
     ),
     GoRoute(
+      path: '/pmo/approve/:requestId',
+      name: 'pmoApprove',
+      pageBuilder: (context, state) {
+        final requestId = state.pathParameters['requestId'] ?? '';
+        final pmoName = state.uri.queryParameters['pmoName'] ?? 'PMO';
+        return CustomTransitionPage(
+          child: PMOLinkApprovalScreen(
+            linkRequestId: requestId,
+            pmoName: pmoName,
+          ),
+          transitionDuration: const Duration(milliseconds: 300),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeInOutCubic,
+              ).drive(Tween(begin: const Offset(0, 1), end: Offset.zero)),
+              child: child,
+            );
+          },
+        );
+      },
+    ),
+    GoRoute(
       path: '/pmo/patient/:id',
       name: 'pmoPatientDetail',
       pageBuilder: (context, state) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -45,6 +46,43 @@ class _PMOPatientDetailScreenState extends State<PMOPatientDetailScreen> {
     }
   }
 
+  void _showUnlinkDialog() {
+    final patient = _data?['patient'] as Map<String, dynamic>?;
+    final name = patient?['full_name'] as String? ?? 'pasien ini';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Putus Hubungan?'),
+        content: Text('Anda tidak akan lagi bisa memantau $name.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ApiService.instance.unlinkPMOPatient(widget.patientId);
+                if (mounted) context.pop();
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(apiErrorMessage(e))),
+                  );
+                }
+              }
+            },
+            child: const Text(
+              'Putus',
+              style: TextStyle(color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final patient = _data?['patient'] as Map<String, dynamic>?;
@@ -61,6 +99,14 @@ class _PMOPatientDetailScreenState extends State<PMOPatientDetailScreen> {
           patient?['full_name'] as String? ?? 'Detail Pasien',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          if (_data != null)
+            IconButton(
+              icon: const Icon(Icons.link_off),
+              tooltip: 'Putus hubungan',
+              onPressed: _showUnlinkDialog,
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

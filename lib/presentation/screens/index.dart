@@ -26,4 +26,5 @@ export 'settings/rate_app_screen.dart';
 export 'progress/monthly_report_screen.dart';
 export 'pmo/pmo_dashboard_screen.dart';
 export 'pmo/pmo_link_screen.dart';
+export 'pmo/pmo_link_approval_screen.dart';
 export 'pmo/pmo_patient_detail_screen.dart';
