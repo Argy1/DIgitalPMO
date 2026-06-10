@@ -7,8 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/pmo_label.dart';
-import '../../../core/widgets/pmo_med_pill.dart';
 
 class MedicationConfirmScreen extends StatefulWidget {
   const MedicationConfirmScreen({super.key});
@@ -28,7 +26,15 @@ class _MedicationConfirmScreenState extends State<MedicationConfirmScreen>
   bool _cameraUnavailable = false;
   bool _permissionDenied = false;
 
-  static const _meds = ['R', 'H', 'Z', 'E'];
+  // Medication info loaded from backend
+  String? _medicationType;   // "FDC" or "Kombinasi"
+  String? _fdcType;
+  int? _tabletCount;
+  int _frequencyPerWeek = 7;
+  List<String> _customMeds = [];
+  String _phase = 'intensive';
+  List<String> _meds = ['R', 'H', 'Z', 'E'];
+
   static const _tips = [
     'Cahaya cukup',
     'Tidak blur',
@@ -45,6 +51,47 @@ class _MedicationConfirmScreenState extends State<MedicationConfirmScreen>
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
     _setup();
+    _loadScheduleInfo();
+  }
+
+  Future<void> _loadScheduleInfo() async {
+    try {
+      final today = await ApiService.instance.getTodayMedication();
+      final schedule = today['schedule'] as Map<String, dynamic>?;
+      if (schedule == null) return;
+      final medType = schedule['medication_type'] as String?;
+      final fdc = schedule['fdc_type'] as String?;
+      final count = schedule['tablet_count'] as int?;
+      final freq = schedule['frequency_per_week'] as int? ?? 7;
+      final ph = schedule['phase'] as String? ?? 'intensive';
+      final rawMeds = schedule['medications'];
+      List<String> meds;
+      if (rawMeds is List) {
+        if (rawMeds.isNotEmpty && rawMeds.first is String) {
+          meds = List<String>.from(rawMeds);
+        } else {
+          meds = rawMeds
+              .map((e) => (e as Map<String, dynamic>)['code'] as String? ?? '')
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      } else {
+        meds = ph == 'intensive' ? ['R', 'H', 'Z', 'E'] : ['R', 'H'];
+      }
+      if (mounted) {
+        setState(() {
+          _medicationType = medType;
+          _fdcType = fdc;
+          _tabletCount = count;
+          _frequencyPerWeek = freq;
+          _phase = ph;
+          _customMeds = meds;
+          _meds = meds;
+        });
+      }
+    } catch (_) {
+      // keep defaults — camera still works without schedule info
+    }
   }
 
   @override
@@ -224,13 +271,19 @@ class _MedicationConfirmScreenState extends State<MedicationConfirmScreen>
           DraggableScrollableSheet(
             initialChildSize: sheetFraction,
             minChildSize: sheetFraction,
-            maxChildSize: 0.72,
+            maxChildSize: 0.82,
             builder: (context, scrollController) {
               return _BottomSheet(
                 scrollController: scrollController,
                 scanning: _isScanning,
                 meds: _meds,
                 tips: _tips,
+                medicationType: _medicationType,
+                fdcType: _fdcType,
+                tabletCount: _tabletCount,
+                frequencyPerWeek: _frequencyPerWeek,
+                phase: _phase,
+                customMeds: _customMeds,
                 onCapture: _capture,
                 onCancel: () {
                   if (context.canPop()) context.pop();
@@ -625,6 +678,12 @@ class _BottomSheet extends StatelessWidget {
   final bool scanning;
   final List<String> meds;
   final List<String> tips;
+  final String? medicationType;
+  final String? fdcType;
+  final int? tabletCount;
+  final int frequencyPerWeek;
+  final String phase;
+  final List<String> customMeds;
   final VoidCallback onCapture;
   final VoidCallback onCancel;
 
@@ -633,6 +692,12 @@ class _BottomSheet extends StatelessWidget {
     required this.scanning,
     required this.meds,
     required this.tips,
+    this.medicationType,
+    this.fdcType,
+    this.tabletCount,
+    this.frequencyPerWeek = 7,
+    this.phase = 'intensive',
+    this.customMeds = const [],
     required this.onCapture,
     required this.onCancel,
   });
@@ -659,20 +724,11 @@ class _BottomSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          PMOLabel(
-            scanning ? 'Obat yang sedang dicek' : 'Obat yang harus difoto',
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              for (final m in meds)
-                Expanded(child: PMOMedPill(kind: m, size: 36, showLabel: true)),
-            ],
-          ),
+          _buildMedicationInfoCard(),
           const SizedBox(height: 14),
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 12),
-          if (scanning) _buildAnalyzing() else _buildTips(),
+          if (scanning) _buildAnalyzing() else _buildPhotoTips(),
           const SizedBox(height: 18),
           _buildCaptureButton(),
           const SizedBox(height: 6),
@@ -705,7 +761,138 @@ class _BottomSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildTips() {
+  Widget _buildMedicationInfoCard() {
+    final isFDC = medicationType == 'FDC';
+    final fdc4or2 = phase == 'intensive' ? '4FDC' : '2FDC';
+    final freqLabel = frequencyPerWeek == 3 ? '3x seminggu' : 'Setiap hari';
+
+    final String jenisObat;
+    final String? extraLine;
+    if (isFDC) {
+      jenisObat = '$fdc4or2 (${fdcType ?? "FDC"})';
+      extraLine = tabletCount != null ? '$tabletCount tablet' : null;
+    } else if (medicationType == 'Kombinasi') {
+      jenisObat = 'Kombinasi Khusus';
+      final medNames = {
+        'R': 'Rifampicin', 'H': 'Isoniazid',
+        'Z': 'Pirazinamid', 'E': 'Etambutol',
+      };
+      final names = customMeds.map((m) => medNames[m] ?? m).toList();
+      extraLine = names.isNotEmpty ? names.join(' + ') : null;
+    } else {
+      jenisObat = phase == 'intensive' ? 'RHZE (Fase Intensif)' : 'RH (Fase Lanjutan)';
+      extraLine = null;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.tealSoft,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('💊', style: TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Text(
+                scanning ? 'Obat yang sedang diverifikasi' : 'Obat untuk dikonfirmasi hari ini',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _infoRow('Jenis', jenisObat),
+          if (extraLine != null) _infoRow(isFDC ? 'Jumlah' : 'Obat', extraLine),
+          _infoRow('Frekuensi', freqLabel),
+          if (!scanning) ...[
+            const SizedBox(height: 10),
+            const Divider(height: 1, color: AppColors.border),
+            const SizedBox(height: 10),
+            const Text(
+              '📸 Foto harus menampilkan:',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _checkItem('Semua tablet di telapak tangan'),
+            _checkItem(isFDC && tabletCount != null
+                ? 'Jumlah tablet terlihat jelas ($tabletCount tablet)'
+                : 'Semua obat terlihat jelas'),
+            _checkItem('Pencahayaan cukup'),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textMute,
+              ),
+            ),
+          ),
+          const Text(':', style: TextStyle(fontSize: 12, color: AppColors.textMute)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _checkItem(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.check_circle_rounded, size: 15, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.text,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotoTips() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

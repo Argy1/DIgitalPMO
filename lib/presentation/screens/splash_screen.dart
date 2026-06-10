@@ -44,30 +44,41 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkAuthState() async {
-    var destination = '/onboarding';
+    final seenOnboarding =
+        Hive.box<dynamic>(HiveBoxes.settings).get('hasSeenOnboarding', defaultValue: false) == true;
+    var destination = seenOnboarding ? '/login' : '/onboarding';
+
     try {
       final hasToken = await ApiService.instance.hasValidToken().timeout(
         const Duration(seconds: 3),
       );
-      if (hasToken) {
-        // Tentukan tujuan berdasarkan role; fallback ke home bila gagal.
-        destination = '/home/dashboard';
-        try {
-          final profileData = await ApiService.instance.getMyProfile().timeout(
-            const Duration(seconds: 5),
-          );
-          final user = profileData['user'] as Map<String, dynamic>?;
-          if ((user?['role'] as String?) == 'pmo') {
-            destination = '/pmo/dashboard';
-          }
-        } catch (_) {
-          // biarkan default /home/dashboard
+      if (!hasToken) {
+        // No token at all → go to login/onboarding (destination already set).
+        if (mounted) context.go(destination);
+        return;
+      }
+
+      // Token exists — validate it by fetching profile.
+      try {
+        final profileData = await ApiService.instance.getMyProfile().timeout(
+          const Duration(seconds: 6),
+        );
+        final user = profileData['user'] as Map<String, dynamic>?;
+        if ((user?['role'] as String?) == 'pmo') {
+          destination = '/pmo/dashboard';
+        } else {
+          destination = '/home/dashboard';
         }
-      } else {
-        final value = Hive.box<dynamic>(
-          HiveBoxes.settings,
-        ).get('hasSeenOnboarding', defaultValue: false);
-        destination = value == true ? '/login' : '/onboarding';
+      } on ServerException catch (e) {
+        // 401 = token expired / invalid → clear and go to login.
+        if (e.statusCode == 401) {
+          await ApiService.instance.logout();
+        }
+        // Any server error: fall through to login (destination already set).
+      } catch (_) {
+        // Network error etc. — token might still be valid; go to dashboard
+        // so user can retry from there rather than being forced to re-login.
+        destination = '/home/dashboard';
       }
     } catch (error, stack) {
       debugPrint('Splash routing fallback: $error\n$stack');

@@ -281,7 +281,40 @@ class MedicationService:
         if not verification:
             raise NotFoundException(detail="Data verifikasi foto tidak ditemukan.")
 
-        result = ai_service.verify_medication_photo(photo_base64)
+        # Pull medication context from the linked log's schedule and patient profile.
+        med_type = fdc_type = phase = None
+        tablet_count = None
+        custom_meds: list[str] = []
+
+        if verification.medication_log_id:
+            log = (
+                db.query(MedicationLog)
+                .filter(MedicationLog.id == verification.medication_log_id)
+                .first()
+            )
+            if log:
+                schedule = (
+                    db.query(MedicationSchedule)
+                    .filter(MedicationSchedule.id == log.schedule_id)
+                    .first()
+                ) if log.schedule_id else None
+
+                if schedule:
+                    med_type = schedule.medication_type
+                    fdc_type = schedule.fdc_type
+                    tablet_count = schedule.tablet_count
+                    phase = schedule.phase
+                    if schedule.medications:
+                        custom_meds = schedule.medications
+
+        result = ai_service.verify_medication_photo(
+            photo_base64,
+            medication_type=med_type,
+            fdc_type=fdc_type,
+            expected_tablet_count=tablet_count,
+            custom_medications=custom_meds or None,
+            phase=phase,
+        )
         verification.is_valid = result["is_valid"]
         verification.confidence_score = result["confidence"]
         verification.ai_response_raw = result["raw"]

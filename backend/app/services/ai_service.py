@@ -2,7 +2,7 @@ import json
 import logging
 import re
 import time
-from typing import Generator, List
+from typing import Generator, List, Optional
 
 import anthropic
 
@@ -15,26 +15,86 @@ settings = get_settings()
 CHAT_MODEL = "claude-haiku-4-5-20251001"
 VISION_MODEL = "claude-haiku-4-5-20251001"
 
+_MED_NAMES = {
+    "R": "Rifampicin (kapsul merah-oranye)",
+    "H": "Isoniazid (tablet putih kecil)",
+    "Z": "Pirazinamid (tablet putih besar)",
+    "E": "Etambutol (tablet putih oval)",
+}
+
 TB_SYSTEM_PROMPT = """Kamu adalah asisten kesehatan AI untuk pasien TB di Indonesia. \
 Berikan informasi yang akurat, empati, dan selalu sarankan konsultasi dengan dokter untuk hal-hal medis serius. \
 Gunakan bahasa Indonesia yang mudah dipahami. \
 Fokus pada edukasi tentang pengobatan TB, pentingnya kepatuhan minum obat, dan dukungan emosional untuk pasien. \
 Jangan pernah merekomendasikan menghentikan pengobatan atau mengubah dosis tanpa konsultasi dokter."""
 
-PHOTO_VERIFY_PROMPT = """Analisis gambar ini untuk verifikasi foto obat TB pasien.
 
-Tentukan apakah gambar mengandung:
-1. Obat/pil/tablet yang terlihat
-2. Foto cukup jelas (tidak blur)
-3. Ada objek yang terlihat seperti obat
+def build_medication_verification_prompt(
+    medication_type: Optional[str] = None,
+    fdc_type: Optional[str] = None,
+    expected_tablet_count: Optional[int] = None,
+    custom_medications: Optional[List[str]] = None,
+    phase: Optional[str] = None,
+) -> str:
+    phase = phase or "intensive"
+    medication_type = medication_type or "FDC"
 
-Respond HANYA dalam JSON:
-{
+    if medication_type == "FDC":
+        fdc_label = "4FDC" if phase == "intensive" else "2FDC"
+        tablet_info = f"{expected_tablet_count} tablet" if expected_tablet_count else "tablet"
+        medication_desc = f"{tablet_info} {fdc_label} ({fdc_type or 'FDC'})"
+        count_instruction = (
+            f"Hitung jumlah tablet: harus ada tepat {expected_tablet_count} tablet"
+            if expected_tablet_count
+            else "Pastikan tablet FDC terlihat jelas"
+        )
+        count_field = expected_tablet_count if expected_tablet_count else "null"
+    else:
+        meds_display = ", ".join(
+            [_MED_NAMES.get(m, m) for m in (custom_medications or [])]
+        )
+        medication_desc = f"Obat kombinasi: {meds_display}" if meds_display else "Obat kombinasi"
+        count_instruction = (
+            f"Pastikan semua obat berikut terlihat: {meds_display}"
+            if meds_display
+            else "Pastikan semua obat terlihat jelas"
+        )
+        count_field = "null"
+
+    phase_label = "Intensif" if phase == "intensive" else "Lanjutan"
+
+    return f"""Kamu adalah AI verifikasi kepatuhan minum obat TB untuk aplikasi DigitalPMO.
+
+TUGAS: Verifikasi apakah foto ini menunjukkan pasien sedang memegang obat TB yang benar sesuai jadwal.
+
+OBAT YANG DIHARAPKAN:
+- Jenis: {medication_desc}
+- Fase pengobatan: {phase_label}
+- {count_instruction}
+
+KRITERIA VERIFIKASI:
+1. Ada tablet/kapsul obat yang terlihat jelas di foto
+2. Obat ada di tangan/telapak tangan (bukan di meja atau kemasan)
+3. {"Jumlah tablet = " + str(expected_tablet_count) if expected_tablet_count else "Obat yang dipilih dokter terlihat"}
+4. Foto terlihat real-time (bukan foto obat dari internet atau gambar)
+
+RESPONS dalam format JSON:
+{{
   "is_valid": true/false,
   "confidence": 0-100,
   "detected_objects": ["pill", "tablet", ...],
-  "rejection_reason": "null atau alasan penolakan"
-}"""
+  "tablets_detected": angka atau null,
+  "tablets_expected": {count_field},
+  "count_match": true/false/null,
+  "issues": ["list masalah jika ada"],
+  "rejection_reason": "null atau alasan penolakan dalam Bahasa Indonesia"
+}}
+
+PENTING:
+- Jika tidak yakin (confidence < 60), set is_valid = false
+- Jangan pernah verify foto yang jelas bukan obat
+- Jika foto blur atau pencahayaan buruk, set is_valid = false
+- rejection_reason harus dalam Bahasa Indonesia yang jelas untuk pasien"""
 
 
 class AIService:
@@ -80,14 +140,29 @@ class AIService:
 
     # ── Photo verification ────────────────────────────────────────────────────
 
-    def verify_medication_photo(self, photo_base64: str) -> dict:
+    def verify_medication_photo(
+        self,
+        photo_base64: str,
+        medication_type: Optional[str] = None,
+        fdc_type: Optional[str] = None,
+        expected_tablet_count: Optional[int] = None,
+        custom_medications: Optional[List[str]] = None,
+        phase: Optional[str] = None,
+    ) -> dict:
         """Run AI vision verification on a medication photo. Returns parsed result."""
         start = time.perf_counter()
         b64 = self._strip_data_uri(photo_base64)
+        prompt = build_medication_verification_prompt(
+            medication_type=medication_type,
+            fdc_type=fdc_type,
+            expected_tablet_count=expected_tablet_count,
+            custom_medications=custom_medications,
+            phase=phase,
+        )
         try:
             response = self.client.messages.create(
                 model=VISION_MODEL,
-                max_tokens=300,
+                max_tokens=400,
                 messages=[
                     {
                         "role": "user",
@@ -100,7 +175,7 @@ class AIService:
                                     "data": b64,
                                 },
                             },
-                            {"type": "text", "text": PHOTO_VERIFY_PROMPT},
+                            {"type": "text", "text": prompt},
                         ],
                     }
                 ],
@@ -114,6 +189,10 @@ class AIService:
                 "is_valid": bool(parsed.get("is_valid", False)),
                 "confidence": float(parsed.get("confidence", 0)),
                 "detected_objects": parsed.get("detected_objects", []),
+                "tablets_detected": parsed.get("tablets_detected"),
+                "tablets_expected": parsed.get("tablets_expected"),
+                "count_match": parsed.get("count_match"),
+                "issues": parsed.get("issues", []),
                 "rejection_reason": rejection,
                 "raw": parsed,
                 "model": VISION_MODEL,
@@ -126,6 +205,10 @@ class AIService:
                 "is_valid": None,
                 "confidence": 0.0,
                 "detected_objects": [],
+                "tablets_detected": None,
+                "tablets_expected": None,
+                "count_match": None,
+                "issues": [],
                 "rejection_reason": "Verifikasi otomatis gagal. Foto akan ditinjau manual.",
                 "raw": {"error": str(exc)},
                 "model": VISION_MODEL,

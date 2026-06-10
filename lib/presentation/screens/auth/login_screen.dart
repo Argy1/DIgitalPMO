@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/auth_credential_service.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/pmo_button.dart';
 
@@ -16,8 +20,41 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _showPassword = false;
   bool _isLoading = false;
+  bool _isBiometricLoading = false;
   String? _phoneError;
   String? _passwordError;
+
+  bool _biometricAvailable = false;
+  bool _biometricLoginEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadInitialState());
+  }
+
+  Future<void> _loadInitialState() async {
+    final creds = AuthCredentialService.instance;
+    final canUse = await creds.canUseBiometrics();
+    final enabled = await creds.isBiometricLoginEnabled();
+    final savedPhone = await creds.loadSavedPhone();
+
+    if (!mounted) return;
+    setState(() {
+      _biometricAvailable = canUse;
+      _biometricLoginEnabled = enabled;
+    });
+
+    // Auto-fill phone number if we have it saved.
+    if (savedPhone != null && _phoneController.text.isEmpty) {
+      _phoneController.text = savedPhone;
+    }
+
+    // Auto-trigger biometric prompt if enabled and credentials are saved.
+    if (canUse && enabled) {
+      unawaited(_handleBiometricLogin());
+    }
+  }
 
   @override
   void dispose() {
@@ -49,7 +86,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     if (!_validateForm()) return;
-
     setState(() => _isLoading = true);
 
     try {
@@ -62,27 +98,136 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = profileData['user'] as Map<String, dynamic>?;
       final role = user?['role'] as String? ?? 'patient';
       if (!mounted) return;
-      // PMO punya dashboard sendiri; tidak perlu setup profil medis pasien.
-      if (role == 'pmo') {
-        context.go('/pmo/dashboard');
-      } else if (role == 'doctor') {
-        context.go('/home/dashboard');
-      } else if (profile == null) {
-        final phone = Uri.encodeComponent(
+
+      unawaited(NotificationService.instance.requestPermissions());
+
+      // Ask to enable biometric login if available and not yet set up.
+      if (_biometricAvailable && !_biometricLoginEnabled) {
+        unawaited(_promptSaveBiometric(
+          phone: normalizePhoneNumber(_phoneController.text),
+          password: _passwordController.text,
+        ));
+      } else if (_biometricLoginEnabled) {
+        // Update saved credentials in case they changed.
+        await AuthCredentialService.instance.saveCredentials(
           normalizePhoneNumber(_phoneController.text),
+          _passwordController.text,
         );
-        final name = Uri.encodeComponent(user?['full_name'] as String? ?? '');
-        context.go('/setup-profile/$phone/$name');
-      } else {
-        context.go('/home/dashboard');
       }
+
+      _navigateAfterLogin(role: role, profile: profile, user: user);
     } catch (e) {
       if (mounted) {
         setState(() => _passwordError = apiErrorMessage(e));
       }
     } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleBiometricLogin() async {
+    final creds = AuthCredentialService.instance;
+    final saved = await creds.loadCredentials();
+    if (saved == null) return;
+
+    setState(() => _isBiometricLoading = true);
+    try {
+      final authenticated = await creds.authenticate(
+        reason: 'Masuk ke DigitalPMO dengan sidik jari',
+      );
+      if (!authenticated || !mounted) {
+        setState(() => _isBiometricLoading = false);
+        return;
+      }
+
+      await ApiService.instance.login(
+        phone: saved.phone,
+        password: saved.password,
+      );
+      final profileData = await ApiService.instance.getMyProfile();
+      final profile = profileData['patient_profile'] as Map<String, dynamic>?;
+      final user = profileData['user'] as Map<String, dynamic>?;
+      final role = user?['role'] as String? ?? 'patient';
+      if (!mounted) return;
+
+      unawaited(NotificationService.instance.requestPermissions());
+      _navigateAfterLogin(role: role, profile: profile, user: user);
+    } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        // Show error but don't block manual login.
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Login biometrik gagal: ${apiErrorMessage(e)}'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isBiometricLoading = false);
+    }
+  }
+
+  void _navigateAfterLogin({
+    required String role,
+    required Map<String, dynamic>? profile,
+    required Map<String, dynamic>? user,
+  }) {
+    if (role == 'pmo') {
+      context.go('/pmo/dashboard');
+    } else if (role == 'doctor') {
+      context.go('/home/dashboard');
+    } else if (profile == null) {
+      final phone = Uri.encodeComponent(
+        normalizePhoneNumber(_phoneController.text),
+      );
+      final name = Uri.encodeComponent(user?['full_name'] as String? ?? '');
+      context.go('/setup-profile/$phone/$name');
+    } else {
+      context.go('/home/dashboard');
+    }
+  }
+
+  Future<void> _promptSaveBiometric({
+    required String phone,
+    required String password,
+  }) async {
+    if (!mounted) return;
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Aktifkan Login Biometrik?',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+        ),
+        content: const Text(
+          'Masuk lebih cepat di lain waktu menggunakan sidik jari atau wajah, tanpa perlu mengetik password.',
+          style: TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Nanti Saja'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Aktifkan'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSave == true) {
+      await AuthCredentialService.instance.saveCredentials(phone, password);
+      await AuthCredentialService.instance.setBiometricLoginEnabled(true);
+      if (mounted) {
+        setState(() => _biometricLoginEnabled = true);
       }
     }
   }
@@ -95,6 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Column(
         children: [
+          // ── Header ──────────────────────────────────────────────────────────
           Container(
             width: double.infinity,
             height: headerHeight,
@@ -107,7 +253,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             child: Stack(
               children: [
-                // Decorative blobs
                 Positioned(
                   right: -40,
                   top: -40,
@@ -197,11 +342,13 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
             ),
           ),
+
+          // ── Form ────────────────────────────────────────────────────────────
           Expanded(
             child: Container(
               color: Colors.white,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+                padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -214,12 +361,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       prefixIcon: Icons.phone,
                       error: _phoneError,
                       onChanged: (_) {
-                        if (_phoneError != null) {
-                          _validateForm();
-                        }
+                        if (_phoneError != null) _validateForm();
                       },
                     ),
                     const SizedBox(height: 20),
+
                     // Password input
                     _PMOInput(
                       label: 'Password',
@@ -231,17 +377,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       suffixIcon: _showPassword
                           ? Icons.visibility
                           : Icons.visibility_off,
-                      onSuffixTap: () {
-                        setState(() => _showPassword = !_showPassword);
-                      },
+                      onSuffixTap: () =>
+                          setState(() => _showPassword = !_showPassword),
                       error: _passwordError,
                       onChanged: (_) {
-                        if (_passwordError != null) {
-                          _validateForm();
-                        }
+                        if (_passwordError != null) _validateForm();
                       },
                     ),
                     const SizedBox(height: 12),
+
                     // Forgot password
                     Align(
                       alignment: Alignment.centerRight,
@@ -249,9 +393,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         onTap: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text(
-                                'Fitur lupa password belum tersedia.',
-                              ),
+                              content:
+                                  Text('Fitur lupa password belum tersedia.'),
                             ),
                           );
                         },
@@ -266,6 +409,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 28),
+
                     // Login button
                     PMOButton(
                       'Masuk',
@@ -273,12 +417,26 @@ class _LoginScreenState extends State<LoginScreen> {
                       isLoading: _isLoading,
                       width: double.infinity,
                     ),
+
+                    // ── Biometric login button ────────────────────────────────
+                    if (_biometricAvailable && _biometricLoginEnabled) ...[
+                      const SizedBox(height: 16),
+                      _BiometricButton(
+                        isLoading: _isBiometricLoading,
+                        onTap: _isBiometricLoading || _isLoading
+                            ? null
+                            : _handleBiometricLogin,
+                      ),
+                    ],
+
                     const SizedBox(height: 20),
+
                     // Divider
                     Row(
                       children: [
                         Expanded(
-                          child: Container(height: 1, color: AppColors.border),
+                          child:
+                              Container(height: 1, color: AppColors.border),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -292,17 +450,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         Expanded(
-                          child: Container(height: 1, color: AppColors.border),
+                          child:
+                              Container(height: 1, color: AppColors.border),
                         ),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    // Register button
+
+                    // Register link
                     Center(
                       child: GestureDetector(
-                        onTap: () {
-                          context.go('/register');
-                        },
+                        onTap: () => context.go('/register'),
                         child: RichText(
                           text: TextSpan(
                             style: const TextStyle(
@@ -327,7 +485,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    // Security message
+
                     Center(
                       child: Text(
                         '🔒 Data kamu aman & terenkripsi',
@@ -348,6 +506,58 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+
+// ── Biometric login button ────────────────────────────────────────────────────
+
+class _BiometricButton extends StatelessWidget {
+  const _BiometricButton({required this.isLoading, this.onTap});
+
+  final bool isLoading;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+          borderRadius: BorderRadius.circular(12),
+          color: AppColors.primary.withValues(alpha: 0.05),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isLoading)
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: AppColors.primary,
+                ),
+              )
+            else
+              Icon(Icons.fingerprint, color: AppColors.primary, size: 26),
+            const SizedBox(width: 10),
+            Text(
+              isLoading ? 'Memverifikasi...' : 'Masuk dengan Sidik Jari',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Text input widget ─────────────────────────────────────────────────────────
 
 class _PMOInput extends StatefulWidget {
   final String label;

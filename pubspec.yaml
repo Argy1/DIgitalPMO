@@ -37,6 +37,7 @@ dependencies:
   go_router: ^13.2.0
   dio: ^5.4.3
   hive_flutter: ^1.1.0
+  firebase_core: ^2.32.0
   firebase_messaging: ^14.9.0
   flutter_local_notifications: ^17.1.2
   camera: ^0.10.5

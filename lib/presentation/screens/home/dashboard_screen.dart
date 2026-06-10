@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/notification_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../data/models/medication_schedule_model.dart';
 import '../../../core/widgets/pmo_med_pill.dart';
 import '../../../core/widgets/pmo_shimmer.dart';
 import '../../../core/widgets/pmo_empty_state.dart';
@@ -37,6 +41,14 @@ class _DashboardScreenState extends State<DashboardScreen>
   MedicationStatus _medStatus = MedicationStatus.notTaken;
   String? _confirmedAt;
   bool _isHospitalized = false;
+
+  // Schedule info for medicine card
+  String? _medicationType;
+  String? _fdcType;
+  int? _tabletCount;
+  int _frequencyPerWeek = 7;
+  List<int> _scheduleDays = [];
+  bool _isTodayScheduled = true;
 
   String _phase = 'intensive';
   double _progress = 0.0;
@@ -134,6 +146,39 @@ class _DashboardScreenState extends State<DashboardScreen>
                 '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
           }
         }
+      }
+
+      // Parse schedule info for medicine card
+      final schedule = todayData['schedule'] as Map<String, dynamic>?;
+      if (schedule != null) {
+        _medicationType = schedule['medication_type'] as String?;
+        _fdcType = schedule['fdc_type'] as String?;
+        _tabletCount = schedule['tablet_count'] as int?;
+        _frequencyPerWeek = schedule['frequency_per_week'] as int? ?? 7;
+        final rawDays = schedule['schedule_days'];
+        if (rawDays is List) {
+          _scheduleDays = rawDays.cast<int>();
+        }
+        // Check if today is a scheduled day (1=Mon … 7=Sun, matches DateTime.weekday)
+        if (_frequencyPerWeek < 7 && _scheduleDays.isNotEmpty) {
+          _isTodayScheduled = _scheduleDays.contains(now.weekday);
+        } else {
+          _isTodayScheduled = true;
+        }
+
+        // Schedule local notification reminders from API data (non-blocking).
+        final scheduleModel = MedicationScheduleModel.fromJson({
+          'phase': _phase,
+          'medications': schedule['medications'] ?? [],
+          'scheduleTimes': schedule['schedule_times'] ?? ['07:00'],
+          'reminderBefore': schedule['reminder_before'] ?? 15,
+          'medication_type': _medicationType,
+          'fdc_type': _fdcType,
+          'tablet_count': _tabletCount,
+          'frequency_per_week': _frequencyPerWeek,
+          'schedule_days': _scheduleDays,
+        });
+        unawaited(NotificationService.instance.scheduleAll(scheduleModel));
       }
 
       final historyDays = historyData['days'] as List<dynamic>? ?? [];
@@ -371,6 +416,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             status: _medStatus,
             phase: _phase,
             confirmedAt: _confirmedAt,
+            medicationType: _medicationType,
+            fdcType: _fdcType,
+            tabletCount: _tabletCount,
+            frequencyPerWeek: _frequencyPerWeek,
+            scheduleDays: _scheduleDays,
+            isTodayScheduled: _isTodayScheduled,
             onConfirm: _confirmMedication,
           ),
           0,
@@ -604,25 +655,65 @@ class _MedicineCard extends StatelessWidget {
   final MedicationStatus status;
   final String phase;
   final String? confirmedAt;
+  final String? medicationType;
+  final String? fdcType;
+  final int? tabletCount;
+  final int frequencyPerWeek;
+  final List<int> scheduleDays;
+  final bool isTodayScheduled;
   final VoidCallback onConfirm;
 
   const _MedicineCard({
     required this.status,
     required this.phase,
     required this.confirmedAt,
+    this.medicationType,
+    this.fdcType,
+    this.tabletCount,
+    this.frequencyPerWeek = 7,
+    this.scheduleDays = const [],
+    this.isTodayScheduled = true,
     required this.onConfirm,
   });
+
+  static const _dayNamesFull = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+
+  String get _medicationTitle {
+    if (medicationType == 'FDC') {
+      final label = phase == 'intensive' ? '4FDC' : '2FDC';
+      final count = tabletCount != null ? '${tabletCount}T ' : '';
+      return 'Obat Pagi — $count$label';
+    }
+    if (medicationType == 'Kombinasi') return 'Obat Pagi — Kombinasi';
+    final regimen = phase == 'intensive' ? 'RHZE' : 'RH';
+    return 'Obat Pagi — $regimen';
+  }
+
+  String get _freqLabel {
+    if (frequencyPerWeek == 3) return 'Fase Lanjutan — 3x seminggu';
+    if (phase == 'intensive') return 'Fase Intensif — setiap hari';
+    return 'Fase Lanjutan — setiap hari';
+  }
+
+  // Next scheduled day name (for "tidak ada jadwal hari ini" banner)
+  String _nextScheduledDay() {
+    if (scheduleDays.isEmpty) return '';
+    final today = DateTime.now().weekday;
+    // Find next day in scheduleDays after today
+    final sorted = [...scheduleDays]..sort();
+    final next = sorted.firstWhere((d) => d > today, orElse: () => sorted.first);
+    return _dayNamesFull[next - 1];
+  }
 
   @override
   Widget build(BuildContext context) {
     final meds = phase == 'intensive' ? ['R', 'H', 'Z', 'E'] : ['R', 'H'];
-    final regimen = meds.join();
+    final isThreePerWeek = frequencyPerWeek == 3 && scheduleDays.isNotEmpty;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: Stack(
         children: [
-          // Card body
           Container(
             decoration: BoxDecoration(
               color: AppColors.card,
@@ -648,98 +739,107 @@ class _MedicineCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'JADWAL HARI INI',
+                          Text(
+                            isTodayScheduled ? 'JADWAL HARI INI' : 'TIDAK ADA JADWAL HARI INI',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.6,
-                              color: AppColors.primary,
+                              color: isTodayScheduled ? AppColors.primary : AppColors.textMute,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Obat Pagi — $regimen',
-                            style: const TextStyle(
-                              fontSize: 22,
+                            isTodayScheduled ? _medicationTitle : 'Hari istirahat obat',
+                            style: TextStyle(
+                              fontSize: 20,
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.3,
-                              color: AppColors.text,
+                              color: isTodayScheduled ? AppColors.text : AppColors.textMute,
                             ),
                           ),
                           const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.access_time_rounded,
-                                size: 16,
-                                color: AppColors.textMute,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '07:00 WIB',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.textMute,
+                          if (isTodayScheduled)
+                            Row(
+                              children: [
+                                const Icon(Icons.access_time_rounded, size: 16, color: AppColors.textMute),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '07:00 WIB',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textMute),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            )
+                          else if (isThreePerWeek)
+                            Row(
+                              children: [
+                                const Icon(Icons.event_rounded, size: 16, color: AppColors.textMute),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Jadwal berikutnya: ${_nextScheduledDay()}',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textMute),
+                                ),
+                              ],
+                            ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _statusBadge,
+                    if (isTodayScheduled) _statusBadge,
                   ],
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    for (var i = 0; i < meds.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 8),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 12,
+                // Weekly schedule dots for 3x/week
+                if (isThreePerWeek) ...[
+                  const SizedBox(height: 14),
+                  _WeeklyScheduleRow(
+                    scheduleDays: scheduleDays,
+                    todayWeekday: DateTime.now().weekday,
+                    confirmedToday: status == MedicationStatus.confirmed,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _freqLabel,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textMute, fontWeight: FontWeight.w500),
+                  ),
+                ],
+                if (isTodayScheduled) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      for (var i = 0; i < meds.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 8),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.background,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: PMOMedPill(kind: meds[i], showLabel: true),
                           ),
-                          decoration: BoxDecoration(
-                            color: AppColors.background,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: PMOMedPill(kind: meds[i], showLabel: true),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
-                ),
+                  ),
+                ],
                 const SizedBox(height: 18),
-                if (status == MedicationStatus.confirmed &&
-                    confirmedAt != null) ...[
+                if (status == MedicationStatus.confirmed && confirmedAt != null) ...[
                   Text(
                     'Dikonfirmasi pukul $confirmedAt',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textMute,
-                    ),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textMute),
                   ),
                   const SizedBox(height: 10),
                 ],
-                _ctaButton,
+                if (isTodayScheduled) _ctaButton,
               ],
             ),
           ),
-          // Left accent bar (Stack-based, avoids non-uniform border + radius)
           Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
+            left: 0, top: 0, bottom: 0,
             child: Container(
               width: 5,
               decoration: BoxDecoration(
-                color: _accentColor,
+                color: isTodayScheduled ? _accentColor : AppColors.border,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(20),
                   bottomLeft: Radius.circular(20),
@@ -797,28 +897,13 @@ class _MedicineCard extends StatelessWidget {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(100),
-      ),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(100)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
-          ),
+          Container(width: 7, height: 7, decoration: BoxDecoration(shape: BoxShape.circle, color: dot)),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
-              color: fg,
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.2, color: fg)),
         ],
       ),
     );
@@ -855,7 +940,6 @@ class _MedicineCard extends StatelessWidget {
         enabled = true;
         break;
     }
-
     return Opacity(
       opacity: enabled ? 1.0 : 0.6,
       child: GestureDetector(
@@ -863,28 +947,96 @@ class _MedicineCard extends StatelessWidget {
         child: Container(
           width: double.infinity,
           height: 54,
-          decoration: BoxDecoration(
-            gradient: gradient,
-            borderRadius: BorderRadius.circular(16),
-          ),
+          decoration: BoxDecoration(gradient: gradient, borderRadius: BorderRadius.circular(16)),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, color: Colors.white, size: 22),
               const SizedBox(width: 10),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.2,
-                ),
-              ),
+              Text(label, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: -0.2)),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Weekly schedule indicator (for 3x/week) ──────────────────
+class _WeeklyScheduleRow extends StatelessWidget {
+  final List<int> scheduleDays;
+  final int todayWeekday;
+  final bool confirmedToday;
+
+  const _WeeklyScheduleRow({
+    required this.scheduleDays,
+    required this.todayWeekday,
+    required this.confirmedToday,
+  });
+
+  static const _labels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(7, (i) {
+        final weekday = i + 1;
+        final isScheduled = scheduleDays.contains(weekday);
+        final isToday = weekday == todayWeekday;
+        final isDone = isToday && confirmedToday;
+        final isPast = isScheduled && weekday < todayWeekday;
+
+        Color bg;
+        Color fg;
+        Widget? icon;
+
+        if (isDone) {
+          bg = AppColors.success;
+          fg = Colors.white;
+          icon = const Icon(Icons.check_rounded, size: 12, color: Colors.white);
+        } else if (isToday && isScheduled) {
+          bg = AppColors.primary;
+          fg = Colors.white;
+          icon = null;
+        } else if (isPast) {
+          bg = AppColors.tealSoft;
+          fg = AppColors.primary;
+          icon = null;
+        } else if (isScheduled) {
+          bg = AppColors.background;
+          fg = AppColors.text;
+          icon = null;
+        } else {
+          bg = Colors.transparent;
+          fg = AppColors.textMute;
+          icon = null;
+        }
+
+        return Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: bg,
+                  border: isScheduled && !isDone
+                      ? Border.all(color: isToday ? AppColors.primary : AppColors.border, width: 1.5)
+                      : null,
+                ),
+                child: Center(
+                  child: icon ??
+                      Text(
+                        _labels[i],
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg),
+                      ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
     );
   }
 }
