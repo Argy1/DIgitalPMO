@@ -48,6 +48,11 @@ class RegisterResponse(BaseModel):
     dev_otp: Optional[str] = None
     skip_otp: bool = False
     role: str = "patient"
+    # Populated only when skip_otp=True (OTP step is bypassed)
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    token_type: str = "bearer"
+    user: Optional[UserResponse] = None
 
 
 class LoginRequest(BaseModel):

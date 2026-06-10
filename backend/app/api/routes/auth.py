@@ -85,15 +85,16 @@ def register(
         user.is_verified = True
         db.commit()
         tokens = auth_service.create_tokens(user)
-        return {
-            **tokens,
-            "user": UserResponse.model_validate(user).model_dump(),
-            "message": "Registrasi berhasil.",
-            "phone_masked": _mask_phone(body.phone),
-            "dev_otp": _otp,
-            "skip_otp": True,
-            "role": user.role,
-        }
+        return RegisterResponse(
+            message="Registrasi berhasil.",
+            phone_masked=_mask_phone(body.phone),
+            dev_otp=_otp,
+            skip_otp=True,
+            role=user.role,
+            access_token=tokens["access_token"],
+            refresh_token=tokens["refresh_token"],
+            user=UserResponse.model_validate(user),
+        )
     return RegisterResponse(
         message="Registrasi berhasil. Kode OTP telah dikirim ke nomor Anda.",
         phone_masked=_mask_phone(body.phone),
