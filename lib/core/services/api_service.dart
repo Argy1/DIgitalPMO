@@ -64,6 +64,9 @@ class _AuthInterceptor extends Interceptor {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
+  // Prevent concurrent refresh storms
+  static bool _refreshing = false;
+
   @override
   Future<void> onRequest(
     RequestOptions options,
@@ -74,6 +77,68 @@ class _AuthInterceptor extends Interceptor {
       options.headers['Authorization'] = 'Bearer $token';
     }
     handler.next(options);
+  }
+
+  @override
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
+    // Only attempt refresh on 401, and not on the refresh endpoint itself
+    // (avoids infinite loop) and not if we're already refreshing.
+    final is401 = err.response?.statusCode == 401;
+    final isRefreshCall =
+        err.requestOptions.path.contains('/auth/refresh-token');
+    if (!is401 || isRefreshCall || _refreshing) {
+      handler.next(err);
+      return;
+    }
+
+    _refreshing = true;
+    try {
+      final refreshToken = await _storage.read(key: 'refresh_token');
+      if (refreshToken == null) {
+        handler.next(err);
+        return;
+      }
+
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: _baseUrl,
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 30),
+          headers: {'Accept': 'application/json'},
+        ),
+      );
+      final refreshRes = await dio.post<Map<String, dynamic>>(
+        '/api/v1/auth/refresh-token',
+        data: {'refresh_token': refreshToken},
+      );
+      final newAccess = refreshRes.data!['access_token'] as String;
+      final newRefresh = refreshRes.data!['refresh_token'] as String;
+      await _storage.write(key: _tokenKey, value: newAccess);
+      await _storage.write(key: 'refresh_token', value: newRefresh);
+
+      // Retry the original request with the new token.
+      final opts = err.requestOptions;
+      opts.headers['Authorization'] = 'Bearer $newAccess';
+      final retryDio = Dio(
+        BaseOptions(
+          baseUrl: _baseUrl,
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 30),
+          headers: {'Accept': 'application/json'},
+        ),
+      );
+      final retryRes = await retryDio.fetch<dynamic>(opts);
+      handler.resolve(retryRes);
+    } catch (_) {
+      // Refresh failed — clear tokens so splash redirects to login.
+      await _storage.deleteAll();
+      handler.next(err);
+    } finally {
+      _refreshing = false;
+    }
   }
 }
 

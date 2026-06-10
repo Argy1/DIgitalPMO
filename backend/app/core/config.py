@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
     SECRET_KEY: str = "your-secret-key-min-32-chars-change-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 jam
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     ANTHROPIC_API_KEY: str = ""
     FIREBASE_CREDENTIALS_PATH: str = "firebase.json"
